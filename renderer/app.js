@@ -1,4 +1,5 @@
 let doc = { version: 1, projects: [] };
+let saveTimer = null;
 
 const list = document.getElementById('list');
 const empty = document.getElementById('empty');
@@ -16,6 +17,11 @@ async function save() {
     alert('Could not save: ' + err.message);
     return false;
   }
+}
+
+function scheduleSave() {
+  clearTimeout(saveTimer);
+  saveTimer = setTimeout(save, 300);
 }
 
 function actionButton(label, ariaLabel, onClick) {
@@ -40,12 +46,17 @@ async function deleteProject(project) {
   const blank = project.name.trim() === '';
   if (!blank && !confirm('Delete this project?')) return;
 
+  const snapshot = doc.projects.map((p) => [p, p.priority]);
   doc.projects = doc.projects
     .filter((p) => p.id !== project.id)
     .sort((a, b) => a.priority - b.priority);
   doc.projects.forEach((p, i) => { p.priority = i; });
 
-  if (await save()) render();
+  if (!(await save())) {
+    doc.projects = snapshot.map(([p]) => p);
+    snapshot.forEach(([p, priority]) => { p.priority = priority; });
+  }
+  render();
 }
 
 function attachRow(project) {
@@ -65,9 +76,13 @@ function attachRow(project) {
     input.dataset.field = field;
     input.placeholder = placeholder;
     input.value = project[field] ?? '';
-    input.addEventListener('change', async () => {
+    input.addEventListener('input', () => {
       project[field] = input.value;
       project.updatedAt = Date.now();
+      scheduleSave();
+    });
+    input.addEventListener('blur', async () => {
+      clearTimeout(saveTimer);
       await save();
     });
     fields.append(input);
@@ -87,8 +102,10 @@ function attachRow(project) {
 
 function render() {
   const projects = doc.projects.slice().sort((a, b) => a.priority - b.priority);
+  const scroll = list.scrollTop;
   list.textContent = '';
   for (const project of projects) list.append(attachRow(project));
+  list.scrollTop = scroll;
   empty.hidden = projects.length > 0;
   list.hidden = projects.length === 0;
 }
@@ -102,8 +119,12 @@ async function addProject() {
     next: '',
     updatedAt: Date.now(),
   };
+  const snapshot = doc.projects.slice();
   doc.projects.push(project);
-  if (!(await save())) return;
+  if (!(await save())) {
+    doc.projects = snapshot;
+    return;
+  }
   render();
   const row = Array.from(list.children).find((li) => li.dataset.id === project.id);
   if (row) row.querySelector('input').focus();
