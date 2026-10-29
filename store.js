@@ -14,6 +14,9 @@ function createStore(filePath) {
   };
 
   const save = (doc) => {
+    if (!doc || typeof doc !== 'object' || !Array.isArray(doc.projects)) {
+      throw new TypeError('save(doc): doc.projects must be an array');
+    }
     fs.mkdirSync(path.dirname(filePath), { recursive: true });
     fs.writeFileSync(filePath + '.tmp', JSON.stringify(doc, null, 2));
     fs.renameSync(filePath + '.tmp', filePath);

@@ -28,6 +28,10 @@ const createWindow = () => {
       sandbox: true,
     },
   });
+  // No navigation away from the local file.
+  win.webContents.on('will-navigate', (event) => { event.preventDefault(); });
+  win.webContents.setWindowOpenHandler(() => ({ action: 'deny' }));
+
   win.loadFile(path.join(__dirname, 'renderer', 'index.html'));
   win.on('closed', () => { win = null; });
 };

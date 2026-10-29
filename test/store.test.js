@@ -31,6 +31,14 @@ test('save leaves no .tmp file behind', () => {
   assert.strictEqual(fs.existsSync(file), true);
 });
 
+test('save rejects a doc without a projects array', () => {
+  const file = tmpFile();
+  const store = createStore(file);
+  assert.throws(() => store.save(null), TypeError);
+  assert.throws(() => store.save({ version: 1 }), TypeError);
+  assert.strictEqual(fs.existsSync(file), false);
+});
+
 test('load returns an empty doc for corrupt JSON instead of throwing', () => {
   const file = tmpFile();
   fs.writeFileSync(file, '{ not json');
