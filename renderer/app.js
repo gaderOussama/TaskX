@@ -1,5 +1,5 @@
 let doc = { version: 1, projects: [] };
-let saveTimer = null;
+let saveFailed = false;
 
 const list = document.getElementById('list');
 const empty = document.getElementById('empty');
@@ -12,22 +12,26 @@ function newId() {
 async function save() {
   try {
     await window.taskx.save(doc);
+    saveFailed = false;
     return true;
   } catch (err) {
-    alert('Could not save: ' + err.message);
+    if (!saveFailed) alert('Could not save: ' + err.message);
+    saveFailed = true;
     return false;
   }
 }
 
-function scheduleSave() {
-  clearTimeout(saveTimer);
-  saveTimer = setTimeout(save, 300);
+function focusAction(id, action) {
+  const row = Array.from(list.children).find((li) => li.dataset.id === id);
+  const button = row && row.querySelector(`[data-action="${action}"]`);
+  (button || document.getElementById('add')).focus();
 }
 
-function actionButton(label, ariaLabel, onClick) {
+function actionButton(label, ariaLabel, action, onClick) {
   const button = document.createElement('button');
   button.type = 'button';
   button.textContent = label;
+  button.dataset.action = action;
   button.setAttribute('aria-label', ariaLabel);
   button.addEventListener('click', onClick);
   return button;
@@ -37,15 +41,17 @@ async function moveProject(id, direction) {
   try {
     doc = await window.taskx.move(id, direction);
     render();
+    focusAction(id, direction);
   } catch (err) {
     alert('Could not move project: ' + err.message);
   }
 }
 
 async function deleteProject(project) {
-  const blank = project.name.trim() === '';
+  const blank = (project.name ?? '').trim() === '';
   if (!blank && !confirm('Delete this project?')) return;
 
+  const index = Array.from(list.children).findIndex((li) => li.dataset.id === project.id);
   const snapshot = doc.projects.map((p) => [p, p.priority]);
   doc.projects = doc.projects
     .filter((p) => p.id !== project.id)
@@ -57,6 +63,8 @@ async function deleteProject(project) {
     snapshot.forEach(([p, priority]) => { p.priority = priority; });
   }
   render();
+  const nearest = list.children[Math.min(index, list.children.length - 1)];
+  focusAction(nearest && nearest.dataset.id, 'delete');
 }
 
 function attachRow(project) {
@@ -76,14 +84,11 @@ function attachRow(project) {
     input.dataset.field = field;
     input.placeholder = placeholder;
     input.value = project[field] ?? '';
+    input.setAttribute('aria-label', `${field}: ${(project.name ?? '').trim() || 'new project'}`);
     input.addEventListener('input', () => {
       project[field] = input.value;
       project.updatedAt = Date.now();
-      scheduleSave();
-    });
-    input.addEventListener('blur', async () => {
-      clearTimeout(saveTimer);
-      await save();
+      save();
     });
     fields.append(input);
   }
@@ -91,9 +96,9 @@ function attachRow(project) {
   const actions = document.createElement('div');
   actions.className = 'actions';
   actions.append(
-    actionButton('↑', 'Move up', () => moveProject(project.id, 'up')),
-    actionButton('↓', 'Move down', () => moveProject(project.id, 'down')),
-    actionButton('×', 'Delete project', () => deleteProject(project)),
+    actionButton('↑', 'Move up', 'up', () => moveProject(project.id, 'up')),
+    actionButton('↓', 'Move down', 'down', () => moveProject(project.id, 'down')),
+    actionButton('×', 'Delete project', 'delete', () => deleteProject(project)),
   );
 
   row.append(fields, actions);
