@@ -1,5 +1,20 @@
 <!doctype html>
 <html>
-  <head><meta charset="utf-8" /><title>TaskX</title></head>
-  <body>TaskX</body>
+  <head>
+    <meta charset="utf-8" />
+    <meta http-equiv="Content-Security-Policy" content="default-src 'none'; script-src 'self'; style-src 'self'" />
+    <title>TaskX</title>
+    <link rel="stylesheet" href="style.css" />
+  </head>
+  <body>
+    <main>
+      <header>
+        <h1>TaskX</h1>
+        <button id="add" type="button">+ Add project</button>
+      </header>
+      <p id="empty">Add your first project.</p>
+      <ul id="list"></ul>
+    </main>
+    <script src="app.js"></script>
+  </body>
 </html>

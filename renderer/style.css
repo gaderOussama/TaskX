@@ -1,0 +1,125 @@
+* {
+  box-sizing: border-box;
+}
+
+html,
+body {
+  height: 100%;
+  margin: 0;
+  overflow: hidden;
+  background: #fbfbfa;
+  color: #1a1a1a;
+  font-family: system-ui, -apple-system, "Segoe UI", sans-serif;
+  font-size: 14px;
+}
+
+main {
+  display: flex;
+  flex-direction: column;
+  height: 100%;
+  padding: 24px 28px;
+}
+
+header {
+  display: flex;
+  align-items: baseline;
+  gap: 12px;
+}
+
+h1 {
+  margin: 0;
+  font-size: 15px;
+  font-weight: 600;
+}
+
+#add {
+  margin-left: auto;
+}
+
+#empty {
+  margin: 24px 0 0;
+  text-align: center;
+  color: #8a8784;
+}
+
+#list {
+  flex: 1;
+  min-height: 0;
+  margin: 0;
+  padding: 0;
+  overflow-y: auto;
+  list-style: none;
+}
+
+.row {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  padding: 10px 0 10px 13px;
+  border-top: 1px solid #ecebea;
+}
+
+/* Priority 0: 3px accent bar + 10px padding keeps the text on the same 13px line. */
+.row:first-child {
+  padding-left: 10px;
+  border-top: none;
+  border-left: 3px solid #2f6f4f;
+}
+
+.fields {
+  display: flex;
+  flex-direction: column;
+  flex: 1;
+  min-width: 0;
+}
+
+.actions {
+  display: flex;
+  gap: 2px;
+}
+
+#add,
+.actions button {
+  font: inherit;
+  font-size: 13px;
+  padding: 2px 4px;
+  background: none;
+  border: none;
+  color: #8a8784;
+  cursor: pointer;
+}
+
+#add:hover,
+.actions button:hover {
+  color: #1a1a1a;
+}
+
+input {
+  width: 100%;
+  min-width: 0;
+  padding: 2px 4px;
+  font: inherit;
+  color: inherit;
+  background: transparent;
+  border: 1px solid transparent;
+  border-radius: 3px;
+  overflow: hidden;
+  white-space: nowrap;
+  text-overflow: ellipsis;
+}
+
+input[data-field="name"] {
+  font-size: 14px;
+  font-weight: 600;
+}
+
+input[data-field="last"],
+input[data-field="next"] {
+  font-size: 13px;
+  color: #555;
+}
+
+input:focus {
+  border-color: #d8d6d3;
+  background: #fff;
+}
