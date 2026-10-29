@@ -1,0 +1,19 @@
+{
+  "name": "taskx",
+  "version": "1.0.0",
+  "main": "main.js",
+  "directories": {
+    "doc": "docs"
+  },
+  "scripts": {
+    "start": "electron .",
+    "test": "node --test \"test/**/*.test.js\""
+  },
+  "keywords": [],
+  "author": "",
+  "license": "ISC",
+  "description": "",
+  "devDependencies": {
+    "electron": "^45.1.0"
+  }
+}
