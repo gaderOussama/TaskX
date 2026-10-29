@@ -45,6 +45,21 @@ test('load returns an empty doc for corrupt JSON instead of throwing', () => {
   assert.deepStrictEqual(createStore(file).load(), { version: 1, projects: [] });
 });
 
+test('load quarantines a corrupt file before it can be overwritten', () => {
+  const file = tmpFile();
+  const corrupt = '{ not json';
+  fs.writeFileSync(file, corrupt);
+  createStore(file).load();
+  assert.strictEqual(fs.existsSync(file + '.corrupt.bak'), true);
+  assert.strictEqual(fs.readFileSync(file + '.corrupt.bak', 'utf8'), corrupt);
+});
+
+test('load returns an empty doc for valid JSON of the wrong shape', () => {
+  const file = tmpFile();
+  fs.writeFileSync(file, '{"projects":"x"}');
+  assert.deepStrictEqual(createStore(file).load(), { version: 1, projects: [] });
+});
+
 test('non-ASCII text survives a round trip', () => {
   const store = createStore(tmpFile());
   const p = { ...project('a', 0), name: 'مشروع', last: 'naïve café', next: '🚀 ship it' };
@@ -62,4 +77,10 @@ test('move past the top edge is a no-op', () => {
   const doc = { version: 1, projects: [project('a', 0), project('b', 1)] };
   const out = createStore(tmpFile()).move(doc, 'a', 'up');
   assert.deepStrictEqual(out.projects.map(p => p.id), ['a', 'b']);
+});
+
+test('move with an unknown id renumbers and does not throw', () => {
+  const doc = { version: 1, projects: [project('a', 5), project('b', 9)] };
+  const out = createStore(tmpFile()).move(doc, 'nope', 'up');
+  assert.deepStrictEqual(out.projects.map(p => [p.id, p.priority]), [['a', 0], ['b', 1]]);
 });

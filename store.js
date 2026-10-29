@@ -9,6 +9,8 @@ function createStore(filePath) {
       const doc = JSON.parse(fs.readFileSync(filePath, 'utf8'));
       return doc && Array.isArray(doc.projects) ? doc : empty();
     } catch {
+      // Quarantine first: the next save would rename an empty doc over the unreadable one.
+      try { fs.copyFileSync(filePath, filePath + '.corrupt.bak'); } catch {}
       return empty();
     }
   };

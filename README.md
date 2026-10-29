@@ -24,3 +24,5 @@ Windows:
 which is `C:\Users\<you>\AppData\Roaming\taskx\data.json`.
 
 It is plain JSON — open it in any editor, copy it to back it up. Deleting the file resets the app to its empty state.
+
+Copy the file before you edit it by hand: if it will not parse, the app starts empty and saves the unreadable copy as `data.json.corrupt.bak`.
