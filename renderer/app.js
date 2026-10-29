@@ -48,7 +48,7 @@ async function moveProject(id, direction) {
 }
 
 async function deleteProject(project) {
-  const blank = (project.name ?? '').trim() === '';
+  const blank = String(project.name ?? '').trim() === '';
   if (!blank && !confirm('Delete this project?')) return;
 
   const index = Array.from(list.children).findIndex((li) => li.dataset.id === project.id);
@@ -84,7 +84,7 @@ function attachRow(project) {
     input.dataset.field = field;
     input.placeholder = placeholder;
     input.value = project[field] ?? '';
-    input.setAttribute('aria-label', `${field}: ${(project.name ?? '').trim() || 'new project'}`);
+    input.setAttribute('aria-label', `${field}: ${String(project.name ?? '').trim() || 'new project'}`);
     input.addEventListener('input', () => {
       project[field] = input.value;
       project.updatedAt = Date.now();

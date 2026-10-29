@@ -4,14 +4,18 @@ const path = require('node:path');
 const empty = () => ({ version: 1, projects: [] });
 
 function createStore(filePath) {
+  // Quarantine first: the next save would rename an empty doc over the unreadable one.
+  const unusable = () => {
+    try { fs.copyFileSync(filePath, filePath + '.corrupt.bak'); } catch {}
+    return empty();
+  };
+
   const load = () => {
     try {
       const doc = JSON.parse(fs.readFileSync(filePath, 'utf8'));
-      return doc && Array.isArray(doc.projects) ? doc : empty();
+      return doc && Array.isArray(doc.projects) ? doc : unusable();
     } catch {
-      // Quarantine first: the next save would rename an empty doc over the unreadable one.
-      try { fs.copyFileSync(filePath, filePath + '.corrupt.bak'); } catch {}
-      return empty();
+      return unusable();
     }
   };
 

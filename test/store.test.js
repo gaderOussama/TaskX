@@ -58,6 +58,7 @@ test('load returns an empty doc for valid JSON of the wrong shape', () => {
   const file = tmpFile();
   fs.writeFileSync(file, '{"projects":"x"}');
   assert.deepStrictEqual(createStore(file).load(), { version: 1, projects: [] });
+  assert.strictEqual(fs.readFileSync(file + '.corrupt.bak', 'utf8'), '{"projects":"x"}');
 });
 
 test('non-ASCII text survives a round trip', () => {
