@@ -13,6 +13,8 @@ npm start
 
 `npm test` runs the storage tests (`node --test`). It covers the storage layer only — the window and its interactions are not tested.
 
+Closing the window hides TaskX to the notification area; it keeps running. Click the T icon there to bring it back, or right-click it and choose Quit to really exit.
+
 ## Where your data lives
 
 Windows:

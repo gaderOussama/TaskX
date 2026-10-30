@@ -1,9 +1,11 @@
 const path = require('node:path');
-const { app, BrowserWindow, ipcMain } = require('electron');
+const { app, BrowserWindow, ipcMain, Tray, Menu, nativeImage } = require('electron');
 const { createStore } = require('./store');
 
 let store;
 let win = null;
+let tray = null;
+let quitting = false;
 
 if (!app.requestSingleInstanceLock()) {
   app.quit();
@@ -13,14 +15,33 @@ if (!app.requestSingleInstanceLock()) {
 app.on('second-instance', () => {
   if (!win) return;
   if (win.isMinimized()) win.restore();
+  win.show();
   win.focus();
 });
+
+const showWindow = () => {
+  if (!win) return;
+  win.show();
+  win.focus();
+};
+
+const createTray = () => {
+  tray = new Tray(nativeImage.createFromPath(path.join(__dirname, 'assets', 'tray.png')));
+  tray.setToolTip('TaskX');
+  tray.setContextMenu(Menu.buildFromTemplate([
+    { label: 'Open TaskX', click: showWindow },
+    { type: 'separator' },
+    { label: 'Quit', click: () => app.quit() },
+  ]));
+  tray.on('click', showWindow);
+};
 
 const createWindow = () => {
   win = new BrowserWindow({
     width: 760,
     height: 560,
     resizable: true,
+    icon: path.join(__dirname, 'assets', 'tray.png'),
     webPreferences: {
       preload: path.join(__dirname, 'preload.js'),
       contextIsolation: true,
@@ -33,8 +54,16 @@ const createWindow = () => {
   win.webContents.setWindowOpenHandler(() => ({ action: 'deny' }));
 
   win.loadFile(path.join(__dirname, 'renderer', 'index.html'));
+  // Closing hides to the tray; only Quit really exits.
+  win.on('close', (event) => {
+    if (quitting) return;
+    event.preventDefault();
+    win.hide();
+  });
   win.on('closed', () => { win = null; });
 };
+
+app.on('before-quit', () => { quitting = true; });
 
 app.whenReady().then(() => {
   store = createStore(path.join(app.getPath('userData'), 'data.json'));
@@ -48,7 +77,9 @@ app.whenReady().then(() => {
     return doc;
   });
 
+  createTray();
   createWindow();
 });
 
 app.on('window-all-closed', () => app.quit());
+
