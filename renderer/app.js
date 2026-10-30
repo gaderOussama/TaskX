@@ -1,4 +1,4 @@
-let doc = { version: 1, projects: [] };
+let doc = { version: 2, projects: [] };
 let saveFailed = false;
 
 const list = document.getElementById('list');
@@ -7,6 +7,12 @@ const empty = document.getElementById('empty');
 function newId() {
   if (crypto.randomUUID) return crypto.randomUUID();
   return Date.now().toString(36) + Math.random().toString(36).slice(2, 8);
+}
+
+function stamp(at) {
+  return new Date(at).toLocaleString(undefined, {
+    day: 'numeric', month: 'short', hour: '2-digit', minute: '2-digit',
+  });
 }
 
 async function save() {
@@ -74,24 +80,99 @@ function attachRow(project) {
 
   const fields = document.createElement('div');
   fields.className = 'fields';
-  for (const [field, placeholder] of [
-    ['name', 'project name'],
-    ['last', 'what I did last…'],
-    ['next', "what's next…"],
-  ]) {
-    const input = document.createElement('input');
-    input.type = 'text';
-    input.dataset.field = field;
-    input.placeholder = placeholder;
-    input.value = project[field] ?? '';
-    input.setAttribute('aria-label', `${field}: ${String(project.name ?? '').trim() || 'new project'}`);
-    input.addEventListener('input', () => {
-      project[field] = input.value;
-      project.updatedAt = Date.now();
-      save();
-    });
-    fields.append(input);
+
+  const nameInput = document.createElement('input');
+  nameInput.type = 'text';
+  nameInput.dataset.field = 'name';
+  nameInput.placeholder = 'project name';
+  nameInput.value = String(project.name ?? '');
+  nameInput.addEventListener('input', () => {
+    project.name = nameInput.value;
+    project.updatedAt = Date.now();
+    save();
+  });
+
+  const didInput = document.createElement('input');
+  didInput.type = 'text';
+  didInput.dataset.field = 'did';
+  didInput.addEventListener('keydown', (event) => {
+    if (event.key !== 'Enter') return;
+    event.preventDefault();
+    logEntry();
+  });
+  didInput.addEventListener('blur', logEntry);
+
+  const nextInput = document.createElement('input');
+  nextInput.type = 'text';
+  nextInput.dataset.field = 'next';
+  nextInput.placeholder = "what's next…";
+  nextInput.value = String(project.next ?? '');
+  nextInput.addEventListener('input', () => {
+    project.next = nextInput.value;
+    project.updatedAt = Date.now();
+    save();
+  });
+
+  const toggle = document.createElement('button');
+  toggle.type = 'button';
+  toggle.className = 'toggle';
+  toggle.addEventListener('click', () => {
+    history.hidden = !history.hidden;
+    toggle.setAttribute('aria-expanded', String(!history.hidden));
+    refresh();
+  });
+
+  const history = document.createElement('ol');
+  history.className = 'history';
+  history.hidden = true;
+
+  const refresh = () => {
+    const entries = project.entries || [];
+    const newest = entries[entries.length - 1];
+    const label = String(project.name ?? '').trim() || 'new project';
+    didInput.placeholder = newest
+      ? `what I did — last: ${newest.text}`
+      : 'what I did — press Enter';
+    didInput.setAttribute('aria-label', `Log what I did on ${label}`);
+    nextInput.setAttribute('aria-label', `What's next for ${label}`);
+    nameInput.setAttribute('aria-label', `Name of ${label}`);
+
+    const older = Math.max(0, entries.length - 1);
+    toggle.hidden = older < 1;
+    toggle.textContent = `${older} earlier ▾`;
+    toggle.setAttribute('aria-label', `Show ${older} earlier entries for ${label}`);
+
+    if (history.hidden) return;
+    history.textContent = '';
+    for (const entry of entries.slice(0, -1).reverse()) {
+      const item = document.createElement('li');
+      item.textContent = `${stamp(entry.at)} · ${entry.text}`;
+      history.append(item);
+    }
+  };
+
+  async function logEntry() {
+    const text = didInput.value.trim();
+    if (text === '') return;
+    const entries = project.entries || [];
+    const newest = entries[entries.length - 1];
+    didInput.value = '';
+    if (newest && newest.text === text) return;
+
+    const snapshot = entries.slice();
+    entries.push({ at: Date.now(), text });
+    project.updatedAt = Date.now();
+    if (!(await save())) {
+      project.entries = snapshot;
+    }
+    refresh();
   }
+
+  const didRow = document.createElement('div');
+  didRow.className = 'did-row';
+  didRow.append(didInput, toggle);
+
+  fields.append(nameInput, didRow, nextInput, history);
 
   const actions = document.createElement('div');
   actions.className = 'actions';
@@ -102,6 +183,7 @@ function attachRow(project) {
   );
 
   row.append(fields, actions);
+  refresh();
   return row;
 }
 
@@ -120,7 +202,7 @@ async function addProject() {
     id: newId(),
     name: '',
     priority: doc.projects.length,
-    last: '',
+    entries: [],
     next: '',
     updatedAt: Date.now(),
   };
@@ -139,7 +221,7 @@ async function init() {
   try {
     doc = await window.taskx.load();
   } catch (err) {
-    doc = { version: 1, projects: [] };
+    doc = { version: 2, projects: [] };
     alert('Could not load projects: ' + err.message);
   }
   render();

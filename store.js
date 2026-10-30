@@ -1,7 +1,22 @@
 const fs = require('node:fs');
 const path = require('node:path');
 
-const empty = () => ({ version: 1, projects: [] });
+const VERSION = 2;
+
+const empty = () => ({ version: VERSION, projects: [] });
+
+// v1 kept one `last` string per project. Fold it into the log, never drop it.
+const migrate = (doc) => {
+  for (const p of doc.projects) {
+    if (!Array.isArray(p.entries)) p.entries = [];
+    if (typeof p.last === 'string' && p.last.trim() !== '') {
+      p.entries.push({ at: p.updatedAt || Date.now(), text: p.last });
+    }
+    delete p.last;
+  }
+  doc.version = VERSION;
+  return doc;
+};
 
 function createStore(filePath) {
   // Quarantine first: the next save would rename an empty doc over the unreadable one.
@@ -12,8 +27,10 @@ function createStore(filePath) {
 
   const load = () => {
     try {
-      const doc = JSON.parse(fs.readFileSync(filePath, 'utf8'));
-      return doc && Array.isArray(doc.projects) ? doc : unusable();
+      // Editors on Windows may prepend a BOM; it is not JSON.
+      const raw = fs.readFileSync(filePath, 'utf8').replace(/^\uFEFF/, '');
+      const doc = JSON.parse(raw);
+      return doc && Array.isArray(doc.projects) ? migrate(doc) : unusable();
     } catch {
       return unusable();
     }
@@ -24,6 +41,11 @@ function createStore(filePath) {
       throw new TypeError('save(doc): doc.projects must be an array');
     }
     fs.mkdirSync(path.dirname(filePath), { recursive: true });
+    // One-step undo: keep the previous good file, so a bad edit is never the only copy.
+    try {
+      JSON.parse(fs.readFileSync(filePath, 'utf8').replace(/^\uFEFF/, ''));
+      fs.copyFileSync(filePath, filePath + '.bak');
+    } catch {}
     fs.writeFileSync(filePath + '.tmp', JSON.stringify(doc, null, 2));
     fs.renameSync(filePath + '.tmp', filePath);
   };

@@ -2,7 +2,7 @@
 
 ## What it is
 
-One screen listing your projects in the priority order you set, each showing what you did last and what's next.
+One screen listing your projects in the priority order you set. Each project keeps a log of what you did on it — every entry stays, dated, forever — plus the one line saying what's next.
 
 ## Run it
 
@@ -28,5 +28,7 @@ Windows:
 which is `C:\Users\<you>\AppData\Roaming\taskx\data.json`.
 
 It is plain JSON — open it in any editor, copy it to back it up. Deleting the file resets the app to its empty state.
+
+Each project holds `entries` (a dated log, oldest first; nothing is ever removed) and `next`. The app keeps the previous version of the file as `data.json.bak` on every write, and an unreadable one as `data.json.corrupt.bak`.
 
 Copy the file before you edit it by hand: if it will not parse, the app starts empty and saves the unreadable copy as `data.json.corrupt.bak`.
