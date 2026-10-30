@@ -3,6 +3,8 @@ let saveFailed = false;
 
 const list = document.getElementById('list');
 const empty = document.getElementById('empty');
+// Uncommitted text in a "what I did" box, so a re-render (move/delete/add) cannot eat it.
+const drafts = new Map();
 
 function newId() {
   if (crypto.randomUUID) return crypto.randomUUID();
@@ -13,6 +15,18 @@ function stamp(at) {
   return new Date(at).toLocaleString(undefined, {
     day: 'numeric', month: 'short', hour: '2-digit', minute: '2-digit',
   });
+}
+
+function initial(name) {
+  const text = String(name ?? '').trim();
+  return text ? text[0] : '•';
+}
+
+// Same id always gets the same colour, so a project is recognisable before you read it.
+function badgeColor(id) {
+  let hue = 0;
+  for (const ch of String(id)) hue = (hue * 31 + ch.codePointAt(0)) % 360;
+  return `hsl(${hue} 42% 38%)`;
 }
 
 async function save() {
@@ -63,6 +77,7 @@ async function deleteProject(project) {
     .filter((p) => p.id !== project.id)
     .sort((a, b) => a.priority - b.priority);
   doc.projects.forEach((p, i) => { p.priority = i; });
+  drafts.delete(project.id);
 
   if (!(await save())) {
     doc.projects = snapshot.map(([p]) => p);
@@ -81,6 +96,12 @@ function attachRow(project) {
   const fields = document.createElement('div');
   fields.className = 'fields';
 
+  const badge = document.createElement('span');
+  badge.className = 'badge';
+  badge.setAttribute('aria-hidden', 'true');
+  badge.style.background = badgeColor(project.id);
+  badge.textContent = initial(project.name);
+
   const nameInput = document.createElement('input');
   nameInput.type = 'text';
   nameInput.dataset.field = 'name';
@@ -89,18 +110,13 @@ function attachRow(project) {
   nameInput.addEventListener('input', () => {
     project.name = nameInput.value;
     project.updatedAt = Date.now();
+    badge.textContent = initial(nameInput.value);
     save();
   });
 
-  const didInput = document.createElement('input');
-  didInput.type = 'text';
-  didInput.dataset.field = 'did';
-  didInput.addEventListener('keydown', (event) => {
-    if (event.key !== 'Enter') return;
-    event.preventDefault();
-    logEntry();
-  });
-  didInput.addEventListener('blur', logEntry);
+  const nameRow = document.createElement('div');
+  nameRow.className = 'name-row';
+  nameRow.append(badge, nameInput);
 
   const nextInput = document.createElement('input');
   nextInput.type = 'text';
@@ -111,6 +127,21 @@ function attachRow(project) {
     project.next = nextInput.value;
     project.updatedAt = Date.now();
     save();
+  });
+
+  const didInput = document.createElement('input');
+  didInput.type = 'text';
+  didInput.dataset.field = 'did';
+  didInput.value = drafts.get(project.id) || '';
+  didInput.addEventListener('input', () => {
+    if (didInput.value === '') drafts.delete(project.id);
+    else drafts.set(project.id, didInput.value);
+  });
+  // Committed only on Enter: a half-typed line is never logged.
+  didInput.addEventListener('keydown', (event) => {
+    if (event.key !== 'Enter') return;
+    event.preventDefault();
+    logEntry();
   });
 
   const toggle = document.createElement('button');
@@ -156,12 +187,17 @@ function attachRow(project) {
     if (text === '') return;
     const entries = project.entries || [];
     const newest = entries[entries.length - 1];
-    didInput.value = '';
-    if (newest && newest.text === text) return;
+    if (newest && newest.text === text) {
+      didInput.value = '';
+      drafts.delete(project.id);
+      return;
+    }
 
     const snapshot = entries.slice();
     entries.push({ at: Date.now(), text });
     project.updatedAt = Date.now();
+    didInput.value = '';
+    drafts.delete(project.id);
     if (!(await save())) {
       project.entries = snapshot;
     }
@@ -172,7 +208,7 @@ function attachRow(project) {
   didRow.className = 'did-row';
   didRow.append(didInput, toggle);
 
-  fields.append(nameInput, didRow, nextInput, history);
+  fields.append(nameRow, nextInput, didRow, history);
 
   const actions = document.createElement('div');
   actions.className = 'actions';
