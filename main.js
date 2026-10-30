@@ -12,15 +12,14 @@ if (!app.requestSingleInstanceLock()) {
   return;
 }
 
-app.on('second-instance', () => {
-  if (!win) return;
-  if (win.isMinimized()) win.restore();
-  win.show();
-  win.focus();
+app.on('second-instance', (_event, argv) => {
+  if (argv.includes('--hidden')) return;
+  if (win && win.isMinimized()) win.restore();
+  showWindow();
 });
 
 const showWindow = () => {
-  if (!win) return;
+  if (!win) createWindow();
   win.show();
   win.focus();
 };
@@ -68,6 +67,16 @@ app.on('before-quit', () => { quitting = true; });
 app.whenReady().then(() => {
   store = createStore(path.join(app.getPath('userData'), 'data.json'));
 
+  // Autostart. Electron's own execPath needs the app directory when unpackaged.
+  // The unpackaged name defaults to electron.app.Electron, which would leave a stale second entry.
+  if (!app.isPackaged) app.setLoginItemSettings({ openAtLogin: false, name: 'electron.app.Electron' });
+  app.setLoginItemSettings({
+    openAtLogin: true,
+    name: 'TaskX',
+    path: process.execPath,
+    args: app.isPackaged ? ['--hidden'] : [path.resolve(__dirname), '--hidden'],
+  });
+
   ipcMain.handle('data:load', () => store.load());
   ipcMain.handle('data:save', (_e, doc) => store.save(doc));
   ipcMain.handle('data:move', (_e, id, direction) => {
@@ -78,7 +87,8 @@ app.whenReady().then(() => {
   });
 
   createTray();
-  createWindow();
+  // A login start goes straight to the tray instead of stealing focus.
+  if (!process.argv.includes('--hidden')) createWindow();
 });
 
 app.on('window-all-closed', () => app.quit());

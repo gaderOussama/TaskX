@@ -15,6 +15,8 @@ npm start
 
 Closing the window hides TaskX to the notification area; it keeps running. Click the T icon there to bring it back, or right-click it and choose Quit to really exit.
 
+It also starts on its own at login, hidden in the notification area. To stop that, remove the `TaskX` entry from Settings → Apps → Startup.
+
 ## Where your data lives
 
 Windows:
