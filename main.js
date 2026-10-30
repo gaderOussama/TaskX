@@ -39,7 +39,13 @@ const createWindow = () => {
   win = new BrowserWindow({
     width: 760,
     height: 560,
+    minWidth: 520,
+    minHeight: 420,
     resizable: true,
+    backgroundColor: '#07111f',
+    // No native title bar: the dark glass surface runs to the window edge.
+    titleBarStyle: 'hidden',
+    titleBarOverlay: { color: '#07111f', symbolColor: '#a9bacd', height: 36 },
     icon: path.join(__dirname, 'assets', 'tray.png'),
     webPreferences: {
       preload: path.join(__dirname, 'preload.js'),

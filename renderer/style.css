@@ -1,3 +1,17 @@
+:root {
+  --bg: #07111f;
+  --surface: rgba(10, 24, 42, 0.58);
+  --raised: rgba(17, 35, 56, 0.72);
+  --hover: rgba(35, 59, 83, 0.62);
+  --text: #eaf2fa;
+  --text-2: #a9bacd;
+  --text-3: #7b8fa6;
+  --accent: #72b7f5;
+  --accent-hover: #91c9fa;
+  --border: rgba(190, 215, 240, 0.13);
+  --line: rgba(190, 215, 240, 0.07);
+}
+
 * {
   box-sizing: border-box;
 }
@@ -7,39 +21,145 @@ body {
   height: 100%;
   margin: 0;
   overflow: hidden;
-  background: #fbfbfa;
-  color: #1a1a1a;
-  font-family: system-ui, -apple-system, "Segoe UI", sans-serif;
+}
+
+body {
+  color: var(--text);
+  /* Segoe is the native Windows face and is already installed: no webfont to ship. */
+  font-family: "Segoe UI Variable Text", "Segoe UI", system-ui, sans-serif;
   font-size: 14px;
+  -webkit-font-smoothing: antialiased;
+  /* Two soft light sources give the translucent panels something to sit in. */
+  background:
+    radial-gradient(760px 440px at 6% -14%, rgba(114, 183, 245, 0.16), transparent 62%),
+    radial-gradient(640px 400px at 104% 112%, rgba(122, 92, 214, 0.12), transparent 58%),
+    var(--bg);
+}
+
+/* Native window chrome is hidden; this strip is what you drag. */
+.titlebar {
+  -webkit-app-region: drag;
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  height: 36px;
+  padding: 0 16px;
+  color: var(--accent);
+  user-select: none;
+}
+
+.mark {
+  width: 16px;
+  height: 16px;
+  flex: none;
+}
+
+.appname {
+  font-size: 13.5px;
+  font-weight: 600;
+  color: var(--text);
+  letter-spacing: -0.01em;
+}
+
+.tagline {
+  font-size: 12px;
+  color: var(--text-3);
 }
 
 main {
   display: flex;
   flex-direction: column;
-  height: 100%;
-  padding: 24px 28px;
+  height: calc(100% - 36px);
 }
 
-header {
+.toolbar {
   display: flex;
-  align-items: baseline;
+  align-items: center;
+  justify-content: space-between;
   gap: 12px;
+  padding: 2px 20px 12px;
 }
 
-h1 {
+.toolbar[hidden] {
+  display: none;
+}
+
+.section-label {
   margin: 0;
-  font-size: 15px;
+  font-size: 11px;
   font-weight: 600;
+  letter-spacing: 0.13em;
+  text-transform: uppercase;
+  color: var(--text-3);
 }
 
-#add {
-  margin-left: auto;
+#add,
+#add-empty {
+  flex: none;
+  font: inherit;
+  font-size: 12.5px;
+  font-weight: 500;
+  padding: 6px 12px;
+  color: var(--accent);
+  background: rgba(114, 183, 245, 0.1);
+  border: 1px solid rgba(114, 183, 245, 0.22);
+  border-radius: 8px;
+  cursor: pointer;
+  transition: background-color 140ms ease, border-color 140ms ease, color 140ms ease;
+}
+
+#add:hover,
+#add-empty:hover {
+  background: rgba(114, 183, 245, 0.17);
+  border-color: rgba(114, 183, 245, 0.34);
+  color: var(--accent-hover);
+}
+
+#add:focus-visible,
+#add-empty:focus-visible,
+.toggle:focus-visible,
+.actions button:focus-visible {
+  outline: 2px solid rgba(114, 183, 245, 0.6);
+  outline-offset: 2px;
+}
+
+.panel {
+  display: flex;
+  flex-direction: column;
+  flex: 1;
+  min-height: 0;
+  margin: 0 20px 20px;
+  background: var(--surface);
+  border: 1px solid var(--border);
+  border-radius: 16px;
+  box-shadow:
+    inset 0 1px 0 rgba(255, 255, 255, 0.05),
+    0 18px 60px rgba(0, 0, 0, 0.34);
+  -webkit-backdrop-filter: blur(24px) saturate(140%);
+  backdrop-filter: blur(24px) saturate(140%);
+  overflow: hidden;
 }
 
 #empty {
-  margin: 24px 0 0;
+  display: grid;
+  place-content: center;
+  justify-items: center;
+  gap: 16px;
+  flex: 1;
+  padding: 40px 48px;
   text-align: center;
-  color: #8a8784;
+}
+
+#empty p {
+  margin: 0;
+  max-width: 42ch;
+  font-size: 13px;
+  line-height: 1.65;
+  color: var(--text-3);
+}
+
+#empty[hidden] {
+  display: none;
 }
 
 #list {
@@ -51,86 +171,123 @@ h1 {
   list-style: none;
 }
 
-.row {
-  display: flex;
-  align-items: center;
-  gap: 12px;
-  padding: 10px 0 10px 13px;
-  border-top: 1px solid #ecebea;
+#list[hidden] {
+  display: none;
 }
 
-/* Priority 0: 3px accent bar + 10px padding keeps the text on the same 13px line. */
+.row {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) auto;
+  align-items: start;
+  gap: 4px 10px;
+  padding: 14px 16px;
+  border-top: 1px solid var(--line);
+  transition: background-color 140ms ease;
+}
+
 .row:first-child {
-  padding-left: 10px;
   border-top: none;
-  border-left: 3px solid #2f6f4f;
+}
+
+.row:hover {
+  background: rgba(190, 215, 240, 0.025);
 }
 
 .fields {
   display: flex;
   flex-direction: column;
-  flex: 1;
+  gap: 1px;
   min-width: 0;
 }
 
 .actions {
   display: flex;
   gap: 2px;
+  opacity: 0;
+  transition: opacity 140ms ease;
 }
 
-#add,
+.row:hover .actions,
+.row:focus-within .actions {
+  opacity: 1;
+}
+
 .actions button {
+  display: grid;
+  place-items: center;
+  width: 24px;
+  height: 24px;
   font: inherit;
-  font-size: 13px;
-  padding: 2px 4px;
-  background: none;
-  border: none;
-  color: #8a8784;
+  font-size: 12px;
+  color: var(--text-3);
+  background: transparent;
+  border: 1px solid transparent;
+  border-radius: 7px;
   cursor: pointer;
+  transition: color 140ms ease, background-color 140ms ease;
 }
 
-#add:hover,
 .actions button:hover {
-  color: #1a1a1a;
+  color: var(--text);
+  background: var(--hover);
+}
+
+.actions button:last-child:hover {
+  color: #f07878;
 }
 
 input {
   width: 100%;
   min-width: 0;
-  padding: 2px 4px;
+  padding: 3px 6px;
   font: inherit;
-  color: inherit;
+  color: var(--text);
   background: transparent;
   border: 1px solid transparent;
-  border-radius: 3px;
+  border-radius: 8px;
   overflow: hidden;
   white-space: nowrap;
   text-overflow: ellipsis;
+  transition: background-color 140ms ease, border-color 140ms ease, box-shadow 140ms ease;
+}
+
+input:hover {
+  background: rgba(190, 215, 240, 0.05);
+}
+
+input:focus {
+  outline: none;
+  background: rgba(190, 215, 240, 0.07);
+  border-color: rgba(114, 183, 245, 0.45);
+  box-shadow: 0 0 0 3px rgba(114, 183, 245, 0.14);
 }
 
 input[data-field="name"] {
-  font-size: 14px;
+  font-size: 14.5px;
   font-weight: 600;
+  letter-spacing: -0.005em;
 }
 
 input[data-field="next"] {
-  font-size: 13px;
-  color: #1a1a1a;
+  font-size: 13.5px;
+  font-weight: 500;
+}
+
+input::placeholder {
+  color: var(--text-3);
 }
 
 input[data-field="did"] {
   font-size: 13px;
-  color: #6f6b67;
-}
-
-input[data-field="did"]::placeholder {
-  color: #9a9793;
+  font-weight: 400;
+  color: var(--text-2);
 }
 
 .name-row {
   display: flex;
   align-items: center;
-  gap: 8px;
+  gap: 9px;
+  padding-bottom: 2px;
 }
 
 .name-row input {
@@ -142,21 +299,21 @@ input[data-field="did"]::placeholder {
   flex: none;
   display: grid;
   place-items: center;
-  width: 18px;
-  height: 18px;
+  width: 22px;
+  height: 22px;
   border-radius: 50%;
   font-size: 11px;
   font-weight: 600;
-  font-style: normal;
   color: #fff;
   text-transform: uppercase;
   user-select: none;
+  box-shadow: inset 0 0 0 1px rgba(255, 255, 255, 0.18);
 }
 
 .field-line {
   display: flex;
   align-items: center;
-  gap: 6px;
+  gap: 7px;
 }
 
 .field-line input {
@@ -166,50 +323,86 @@ input[data-field="did"]::placeholder {
 
 .marker {
   flex: none;
-  width: 12px;
+  width: 13px;
   text-align: center;
   font-size: 12px;
   line-height: 1;
 }
 
 .next-row .marker {
-  color: #2f6f4f;
+  color: var(--accent);
 }
 
 .did-row .marker {
-  color: #b0aca8;
+  color: var(--text-3);
 }
 
 .toggle {
+  flex: none;
   font: inherit;
-  font-size: 12px;
-  padding: 2px 4px;
-  background: none;
-  border: none;
-  color: #b0aca8;
+  font-size: 11.5px;
+  padding: 3px 8px;
+  color: var(--text-3);
+  background: transparent;
+  border: 1px solid transparent;
+  border-radius: 7px;
   cursor: pointer;
   white-space: nowrap;
+  transition: color 140ms ease, background-color 140ms ease;
 }
 
 .toggle:hover {
-  color: #1a1a1a;
+  color: var(--text-2);
+  background: rgba(190, 215, 240, 0.06);
 }
 
+/* Collapsed by default: the live lines stay on top, older ones wait here.
+   A thread rather than a card, so the panel never becomes a card inside a card. */
 .history {
-  margin: 4px 0 0;
-  padding: 0 0 0 4px;
-  max-height: 132px;
+  margin: 9px 0 2px;
+  padding: 2px 0 2px 14px;
+  max-height: 170px;
   overflow-y: auto;
   list-style: none;
-  font-size: 12px;
-  color: #6f6b67;
+  border-left: 1px solid rgba(190, 215, 240, 0.14);
 }
 
 .history li {
-  padding: 2px 0;
-  white-space: nowrap;
-  overflow: hidden;
-  text-overflow: ellipsis;
+  display: flex;
+  flex-direction: column;
+  gap: 3px;
+  padding-left: 4px;
+}
+
+.history li + li {
+  margin-top: 10px;
+  padding-top: 10px;
+  border-top: 1px solid var(--line);
+}
+
+.history .when {
+  font-size: 11px;
+  font-weight: 500;
+  letter-spacing: 0.05em;
+  text-transform: uppercase;
+  color: var(--text-3);
+}
+
+.history .what {
+  font-size: 12.5px;
+  line-height: 1.45;
+  color: var(--text-2);
+}
+
+.history .next {
+  font-size: 12px;
+  line-height: 1.4;
+  color: var(--text-3);
+}
+
+.history .next::before {
+  content: "→ ";
+  color: var(--accent);
 }
 
 .history[hidden],
@@ -217,7 +410,41 @@ input[data-field="did"]::placeholder {
   display: none;
 }
 
-input:focus {
-  border-color: #d8d6d3;
-  background: #fff;
+::-webkit-scrollbar {
+  width: 10px;
+}
+
+::-webkit-scrollbar-track {
+  background: transparent;
+}
+
+::-webkit-scrollbar-thumb {
+  background: rgba(190, 215, 240, 0.14);
+  background-clip: content-box;
+  border: 3px solid transparent;
+  border-radius: 8px;
+}
+
+::-webkit-scrollbar-thumb:hover {
+  background: rgba(190, 215, 240, 0.26);
+  background-clip: content-box;
+}
+
+/* Opaque fallback: readability beats atmosphere. */
+@media (prefers-reduced-transparency: reduce) {
+  body {
+    background: var(--bg);
+  }
+
+  .panel {
+    background: #0a182a;
+    -webkit-backdrop-filter: none;
+    backdrop-filter: none;
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  * {
+    transition: none !important;
+  }
 }

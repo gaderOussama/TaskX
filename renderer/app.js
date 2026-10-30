@@ -23,10 +23,13 @@ function initial(name) {
 }
 
 // Same id always gets the same colour, so a project is recognisable before you read it.
+// Fixed hues rather than a free-running hash: neighbours must be told apart at a
+// glance, and a hash alone can land two ids on the same purple.
+const BADGE_HUES = [212, 268, 158, 30, 350, 190, 96, 300];
 function badgeColor(id) {
-  let hue = 0;
-  for (const ch of String(id)) hue = (hue * 31 + ch.codePointAt(0)) % 360;
-  return `hsl(${hue} 42% 38%)`;
+  let n = 0;
+  for (const ch of String(id)) n = (n * 31 + ch.codePointAt(0)) % 9973;
+  return `hsl(${BADGE_HUES[n % BADGE_HUES.length]} 45% 42%)`;
 }
 
 async function save() {
@@ -148,6 +151,11 @@ function attachRow(project) {
   });
   // Committed only on Enter: a half-typed line is never logged.
   didInput.addEventListener('keydown', (event) => {
+    if (event.key === 'Escape') {
+      if (didInput.value === '') didInput.blur();
+      else { didInput.value = ''; drafts.delete(project.id); }
+      return;
+    }
     if (event.key !== 'Enter') return;
     event.preventDefault();
     logEntry();
@@ -186,7 +194,24 @@ function attachRow(project) {
     history.textContent = '';
     for (const entry of entries.slice(0, -1).reverse()) {
       const item = document.createElement('li');
-      item.textContent = `${stamp(entry.at)} · ${entry.text}`;
+
+      const when = document.createElement('span');
+      when.className = 'when';
+      when.textContent = stamp(entry.at);
+
+      const what = document.createElement('span');
+      what.className = 'what';
+      what.textContent = entry.text;
+
+      item.append(when, what);
+
+      // Entries logged before this field existed simply have no next step.
+      if (entry.next) {
+        const after = document.createElement('span');
+        after.className = 'next';
+        after.textContent = entry.next;
+        item.append(after);
+      }
       history.append(item);
     }
   };
@@ -203,7 +228,9 @@ function attachRow(project) {
     }
 
     const snapshot = entries.slice();
-    entries.push({ at: Date.now(), text });
+    // Keep the next step as it stood at this moment: history stays a narrative,
+    // not just a list of things that happened.
+    entries.push({ at: Date.now(), text, next: String(project.next ?? '').trim() });
     project.updatedAt = Date.now();
     didInput.value = '';
     drafts.delete(project.id);
@@ -245,6 +272,8 @@ function render() {
   list.scrollTop = scroll;
   empty.hidden = projects.length > 0;
   list.hidden = projects.length === 0;
+  // Empty state carries its own call to action; the toolbar would be a second, identical one.
+  document.querySelector('.toolbar').hidden = projects.length === 0;
 }
 
 async function addProject() {
@@ -276,6 +305,13 @@ async function init() {
   }
   render();
   document.getElementById('add').addEventListener('click', addProject);
+  document.getElementById('add-empty').addEventListener('click', addProject);
+  document.addEventListener('keydown', (event) => {
+    if (!event.ctrlKey || event.altKey || event.shiftKey) return;
+    if (event.key.toLowerCase() !== 'n') return;
+    event.preventDefault();
+    addProject();
+  });
 }
 
 document.addEventListener('DOMContentLoaded', init);
