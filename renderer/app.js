@@ -129,6 +129,15 @@ function attachRow(project) {
     save();
   });
 
+  const nextMark = document.createElement('span');
+  nextMark.className = 'marker';
+  nextMark.setAttribute('aria-hidden', 'true');
+  nextMark.textContent = '→';
+
+  const nextRow = document.createElement('div');
+  nextRow.className = 'field-line next-row';
+  nextRow.append(nextMark, nextInput);
+
   const didInput = document.createElement('input');
   didInput.type = 'text';
   didInput.dataset.field = 'did';
@@ -204,11 +213,16 @@ function attachRow(project) {
     refresh();
   }
 
-  const didRow = document.createElement('div');
-  didRow.className = 'did-row';
-  didRow.append(didInput, toggle);
+  const didMark = document.createElement('span');
+  didMark.className = 'marker';
+  didMark.setAttribute('aria-hidden', 'true');
+  didMark.textContent = '✓';
 
-  fields.append(nameRow, nextInput, didRow, history);
+  const didRow = document.createElement('div');
+  didRow.className = 'field-line did-row';
+  didRow.append(didMark, didInput, toggle);
+
+  fields.append(nameRow, nextRow, didRow, history);
 
   const actions = document.createElement('div');
   actions.className = 'actions';
