@@ -152,6 +152,8 @@ function attachRow(project) {
   // Committed only on Enter: a half-typed line is never logged.
   didInput.addEventListener('keydown', (event) => {
     if (event.key === 'Escape') {
+      // Escape here is for the draft, not for closing the panel.
+      event.stopPropagation();
       if (didInput.value === '') didInput.blur();
       else { didInput.value = ''; drafts.delete(project.id); }
       return;
@@ -307,12 +309,23 @@ async function init() {
   render();
   document.getElementById('add').addEventListener('click', addProject);
   document.getElementById('add-empty').addEventListener('click', addProject);
+  document.getElementById('close').addEventListener('click', () => window.taskx.hide());
   document.addEventListener('keydown', (event) => {
+    if (event.key === 'Escape') window.taskx.hide();
     if (!event.ctrlKey || event.altKey || event.shiftKey) return;
     if (event.key.toLowerCase() !== 'n') return;
     event.preventDefault();
     addProject();
   });
+  announceOpen();
+}
+
+// The panel is shown and hidden between uses, so every show replays the entrance.
+function announceOpen() {
+  document.body.classList.remove('is-opening');
+  void document.body.offsetWidth;
+  document.body.classList.add('is-opening');
 }
 
 document.addEventListener('DOMContentLoaded', init);
+window.taskx.onShown(announceOpen);
