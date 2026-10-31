@@ -274,6 +274,7 @@ function render() {
   list.hidden = projects.length === 0;
   // Empty state carries its own call to action; the toolbar would be a second, identical one.
   document.querySelector('.toolbar').hidden = projects.length === 0;
+  document.getElementById('section-label').hidden = projects.length === 0;
 }
 
 async function addProject() {

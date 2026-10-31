@@ -45,7 +45,7 @@ const createWindow = () => {
     backgroundColor: '#07111f',
     // No native title bar: the dark glass surface runs to the window edge.
     titleBarStyle: 'hidden',
-    titleBarOverlay: { color: '#07111f', symbolColor: '#a9bacd', height: 36 },
+    titleBarOverlay: { color: '#00000000', symbolColor: '#a9bacd', height: 36 },
     icon: path.join(__dirname, 'assets', 'tray.png'),
     webPreferences: {
       preload: path.join(__dirname, 'preload.js'),
