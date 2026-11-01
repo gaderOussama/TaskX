@@ -117,6 +117,7 @@ pub fn run() {
             ))?;
             window.set_position(tauri::LogicalPosition::new(geometry.x, geometry.y))?;
             panel::adopt(app.handle(), geometry);
+            panel::clip_now(app.handle());
 
             // Acrylic is the whole reason this is not a web page in a rectangle:
             // it frosts the actual desktop behind the panel.

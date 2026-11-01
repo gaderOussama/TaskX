@@ -15,7 +15,7 @@ const FRAME_MS: u64 = 16;
 const POINTER_MS: u64 = 20;
 const HOVER_INTENT_MS: u64 = 80;
 const LEAVE_DELAY_MS: u64 = 450;
-const LEFT_MARGIN: f64 = 14.0;
+const LEFT_MARGIN: f64 = 0.0;
 const HEIGHT_RATIO: f64 = 0.92;
 
 #[derive(Clone, Copy)]
@@ -106,8 +106,41 @@ pub fn set_reduced(app: &AppHandle, reduced: bool) {
     app.state::<Panel>().reduced.store(reduced, Ordering::SeqCst);
 }
 
-pub fn is_expanded(app: &AppHandle) -> bool {
-    app.state::<Panel>().inner.lock().unwrap().expanded
+/// Acrylic covers the whole native rectangle, so the corners the CSS rounds
+/// away still showed a faint square. Clipping the window to the same shape
+/// removes it, and makes the rounding real for the pointer as well.
+#[cfg(target_os = "windows")]
+fn clip_to_round(window: &WebviewWindow, width: f64, height: f64, scale: f64) {
+    use windows_sys::Win32::Graphics::Gdi::{CreateRoundRectRgn, SetWindowRgn};
+
+    let Ok(hwnd) = window.hwnd() else {
+        return;
+    };
+    let w = (width * scale).round() as i32;
+    let h = (height * scale).round() as i32;
+    // CSS clamps a radius wider than the box, so the strip ends in half-pills.
+    let r = (width.min(20.0) * scale).round() as i32;
+    // The region starts at -r so the left arcs fall outside the window: square
+    // against the screen edge, rounded where it meets the desktop.
+    // SAFETY: the region is created here and handed to the window, which owns
+    // it from that moment on.
+    unsafe {
+        let region = CreateRoundRectRgn(-r, 0, w + 1, h + 1, r * 2, r * 2);
+        if !region.is_null() {
+            SetWindowRgn(hwnd.0, region, 1);
+        }
+    }
+}
+
+#[cfg(not(target_os = "windows"))]
+fn clip_to_round(_: &WebviewWindow, _: f64, _: f64, _: f64) {}
+
+pub fn clip_now(app: &AppHandle) {
+    if let Some(window) = app.get_webview_window("main") {
+        let state = app.state::<Panel>();
+        let inner = state.inner.lock().unwrap();
+        clip_to_round(&window, inner.width, inner.geometry.height, inner.geometry.scale);
+    }
 }
 
 pub fn toggle(app: &AppHandle) {
@@ -141,13 +174,14 @@ pub fn set_expanded(app: &AppHandle, expanded: bool, instant: bool) {
     // and stops, so the panel never fights itself.
     let generation = state.generation.fetch_add(1, Ordering::SeqCst) + 1;
 
-    let (from, to, height) = {
+    let (from, to, height, scale) = {
         let mut inner = state.inner.lock().unwrap();
         inner.expanded = expanded;
         (
             inner.width,
             if expanded { EXPANDED_W } else { COLLAPSED_W },
             inner.geometry.height,
+            inner.geometry.scale,
         )
     };
 
@@ -158,6 +192,7 @@ pub fn set_expanded(app: &AppHandle, expanded: bool, instant: bool) {
     if instant || (to - from).abs() < 0.5 {
         state.inner.lock().unwrap().width = to;
         let _ = window.set_size(LogicalSize::new(to, height));
+        clip_to_round(&window, to, height, scale);
         return;
     }
 
@@ -185,6 +220,7 @@ pub fn set_expanded(app: &AppHandle, expanded: bool, instant: bool) {
 
             if let Some(window) = app.get_webview_window("main") {
                 let _ = window.set_size(LogicalSize::new(width, height));
+                clip_to_round(&window, width, height, scale);
             }
             if progress >= 1.0 {
                 break;
