@@ -1,15 +1,17 @@
 :root {
-  --bg: #07111f;
-  --surface: rgba(10, 24, 42, 0.58);
-  --raised: rgba(17, 35, 56, 0.72);
-  --hover: rgba(35, 59, 83, 0.62);
   --text: #eaf2fa;
   --text-2: #a9bacd;
-  --text-3: #7b8fa6;
+  --text-3: #859ab2;
   --accent: #72b7f5;
   --accent-hover: #91c9fa;
-  --border: rgba(190, 215, 240, 0.13);
-  --line: rgba(190, 215, 240, 0.07);
+  --line: rgba(190, 215, 240, 0.08);
+
+  /* The acrylic underneath already carries the frost and a navy tint; this is
+     only the extra weight needed to keep text readable over a bright desktop. */
+  --surface: rgba(7, 17, 31, 0.42);
+  --surface-strong: rgba(7, 17, 31, 0.52);
+  --border: rgba(190, 215, 240, 0.12);
+  --border-strong: rgba(190, 215, 240, 0.17);
 }
 
 * {
@@ -21,30 +23,100 @@ body {
   height: 100%;
   margin: 0;
   overflow: hidden;
+  /* No background here: everything outside the panel is the desktop, through
+     the acrylic layer. */
+  background: transparent;
 }
 
 body {
   color: var(--text);
-  /* Segoe is the native Windows face and is already installed: no webfont to ship. */
   font-family: "Segoe UI Variable Text", "Segoe UI", system-ui, sans-serif;
   font-size: 14px;
   -webkit-font-smoothing: antialiased;
-  /* Lighter scrim: the panorama has to read, and the top sky is dark enough for the title. */
-  background:
-    linear-gradient(180deg, rgba(7, 17, 31, 0.52) 0%, rgba(7, 17, 31, 0.4) 64px, rgba(7, 17, 31, 0.46) 46%, rgba(7, 17, 31, 0.86) 100%),
-    url("../assets/backdrop.jpg") 38% 50% / cover no-repeat;
 }
 
-/* Native window chrome is hidden; this strip is what you drag. */
-.titlebar {
-  -webkit-app-region: drag;
+/* The window is exactly the panel, so this element is the whole surface. */
+.panel {
+  position: relative;
+  display: flex;
+  flex-direction: column;
+  height: 100%;
+  overflow: hidden;
+  background-color: var(--surface);
+  border: 1px solid var(--border);
+  border-radius: 0 18px 18px 0;
+  box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.06);
+  transition:
+    background-color 320ms ease,
+    border-color 320ms ease,
+    border-radius 280ms cubic-bezier(0.22, 1, 0.36, 1);
+}
+
+.panel.is-expanded {
+  background-color: var(--surface-strong);
+  border-color: var(--border-strong);
+  border-radius: 20px;
+  box-shadow:
+    inset 0 1px 0 rgba(255, 255, 255, 0.08),
+    0 12px 50px rgba(0, 0, 0, 0.3),
+    0 0 20px rgba(100, 160, 220, 0.04);
+}
+
+/* The only thing visible while collapsed: one faint lit edge. */
+.edge {
+  position: absolute;
+  top: 14%;
+  bottom: 14%;
+  right: 0;
+  width: 2px;
+  border-radius: 2px;
+  background: linear-gradient(
+    180deg,
+    transparent,
+    rgba(114, 183, 245, 0.38),
+    rgba(114, 183, 245, 0.16),
+    transparent
+  );
+  opacity: 1;
+  transition: opacity 240ms ease;
+}
+
+.panel.is-expanded .edge {
+  opacity: 0;
+}
+
+.bar {
   display: flex;
   align-items: center;
-  gap: 8px;
-  height: 36px;
-  padding: 0 20px;
+  gap: 6px;
+  flex: none;
+  height: 46px;
+  padding: 0 10px 0 16px;
+  opacity: 0;
+  transition: opacity 160ms ease;
+}
+
+.panel.is-expanded .bar {
+  opacity: 1;
+  transition-delay: 70ms;
+}
+
+.logo {
+  display: flex;
+  align-items: center;
+  gap: 9px;
+  padding: 4px 6px 4px 0;
+  font: inherit;
   color: var(--text-2);
-  user-select: none;
+  background: transparent;
+  border: 0;
+  border-radius: 8px;
+  cursor: pointer;
+  transition: color 140ms ease;
+}
+
+.logo:hover {
+  color: var(--text);
 }
 
 .mark {
@@ -60,23 +132,73 @@ body {
   letter-spacing: -0.01em;
 }
 
-.tagline {
-  font-size: 12px;
-  color: var(--text-2);
+.tools {
+  display: flex;
+  align-items: center;
+  gap: 2px;
+  margin-left: auto;
 }
 
-main {
+.icon-btn {
+  display: grid;
+  place-items: center;
+  width: 28px;
+  height: 28px;
+  font: inherit;
+  color: var(--text-3);
+  background: transparent;
+  border: 1px solid transparent;
+  border-radius: 8px;
+  cursor: pointer;
+  transition: color 140ms ease, background-color 140ms ease;
+}
+
+.icon-btn svg {
+  width: 15px;
+  height: 15px;
+}
+
+.icon-btn:hover {
+  color: var(--text);
+  background: rgba(190, 215, 240, 0.08);
+}
+
+/* Pinned reads as a filled pin, not a second colour. */
+#pin[aria-pressed="true"] {
+  color: var(--accent);
+}
+
+#pin[aria-pressed="true"] svg path:first-child {
+  fill: currentColor;
+  fill-opacity: 0.22;
+}
+
+.panel-content {
   display: flex;
   flex-direction: column;
-  height: calc(100% - 36px);
+  flex: 1;
+  min-height: 0;
+  opacity: 0;
+  transform: translateX(-6px);
+  pointer-events: none;
+  transition:
+    opacity 180ms ease,
+    transform 240ms cubic-bezier(0.22, 1, 0.36, 1);
+}
+
+.panel.is-expanded .panel-content {
+  opacity: 1;
+  transform: translateX(0);
+  pointer-events: auto;
+  transition-delay: 90ms;
 }
 
 .toolbar {
   display: flex;
   align-items: center;
   justify-content: flex-end;
-  gap: 12px;
-  padding: 6px 20px 14px;
+  flex: none;
+  padding: 2px 16px 12px;
 }
 
 .toolbar[hidden] {
@@ -84,8 +206,9 @@ main {
 }
 
 .section-label {
+  flex: none;
   margin: 0;
-  padding: 14px 18px 12px;
+  padding: 0 16px 12px;
   font-size: 11px;
   font-weight: 600;
   letter-spacing: 0.13em;
@@ -122,31 +245,12 @@ main {
 
 #add:focus-visible,
 #add-empty:focus-visible,
+.icon-btn:focus-visible,
+.logo:focus-visible,
 .toggle:focus-visible,
 .actions button:focus-visible {
   outline: 2px solid rgba(234, 242, 250, 0.55);
   outline-offset: 2px;
-}
-
-.panel {
-  display: flex;
-  flex-direction: column;
-  flex: 1;
-  min-height: 0;
-  margin: 0 20px 20px;
-  background-color: var(--surface);
-  /* 3.5% noise: the surface reads as a material rather than a flat fill. */
-  background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='140' height='140'%3E%3Cfilter id='n'%3E%3CfeTurbulence type='fractalNoise' baseFrequency='0.85' numOctaves='3'/%3E%3CfeColorMatrix type='saturate' values='0'/%3E%3C/filter%3E%3Crect width='140' height='140' filter='url(%23n)' opacity='0.035'/%3E%3C/svg%3E");
-  background-size: 140px 140px;
-  border: 1px solid rgba(190, 215, 240, 0.18);
-  border-radius: 16px;
-  box-shadow:
-    inset 0 1px 0 rgba(255, 255, 255, 0.09),
-    0 18px 60px rgba(0, 0, 0, 0.34);
-  /* The panel is the glass: the mountain shows through it, blurred. */
-  -webkit-backdrop-filter: blur(9px) saturate(135%);
-  backdrop-filter: blur(9px) saturate(135%);
-  overflow: hidden;
 }
 
 #empty {
@@ -155,13 +259,13 @@ main {
   justify-items: center;
   gap: 16px;
   flex: 1;
-  padding: 40px 48px;
+  padding: 32px 36px;
   text-align: center;
 }
 
 #empty p {
   margin: 0;
-  max-width: 42ch;
+  max-width: 34ch;
   font-size: 13px;
   line-height: 1.65;
   color: var(--text-3);
@@ -188,8 +292,8 @@ main {
   display: grid;
   grid-template-columns: minmax(0, 1fr) auto;
   align-items: start;
-  gap: 4px 10px;
-  padding: 17px 18px;
+  gap: 4px 8px;
+  padding: 15px 14px;
   border-top: 1px solid var(--line);
   transition: background-color 140ms ease;
 }
@@ -212,7 +316,7 @@ main {
 
 .actions {
   display: flex;
-  gap: 2px;
+  gap: 1px;
   opacity: 0;
   transition: opacity 140ms ease;
 }
@@ -225,21 +329,21 @@ main {
 .actions button {
   display: grid;
   place-items: center;
-  width: 24px;
-  height: 24px;
+  width: 22px;
+  height: 22px;
   font: inherit;
   font-size: 12px;
   color: var(--text-3);
   background: transparent;
   border: 1px solid transparent;
-  border-radius: 7px;
+  border-radius: 6px;
   cursor: pointer;
   transition: color 140ms ease, background-color 140ms ease;
 }
 
 .actions button:hover {
   color: var(--text);
-  background: var(--hover);
+  background: rgba(35, 59, 83, 0.62);
 }
 
 .actions button:last-child:hover {
@@ -249,7 +353,7 @@ main {
 input {
   width: 100%;
   min-width: 0;
-  padding: 3px 6px;
+  padding: 3px 5px;
   font: inherit;
   color: var(--text);
   background: transparent;
@@ -365,8 +469,6 @@ input[data-field="did"] {
   background: rgba(190, 215, 240, 0.06);
 }
 
-/* Collapsed by default: the live lines stay on top, older ones wait here.
-   A thread rather than a card, so the panel never becomes a card inside a card. */
 .history {
   margin: 9px 0 2px;
   padding: 10px 12px 10px 14px;
@@ -440,22 +542,9 @@ input[data-field="did"] {
   background-clip: content-box;
 }
 
-/* Opaque fallback: readability beats atmosphere. */
-@media (prefers-reduced-transparency: reduce) {
-  body {
-    background: var(--bg);
-  }
-
-  .panel {
-    background-image: none;
-    background-color: #0a182a;
-    -webkit-backdrop-filter: none;
-    backdrop-filter: none;
-  }
-}
-
 @media (prefers-reduced-motion: reduce) {
   * {
     transition: none !important;
+    animation: none !important;
   }
 }

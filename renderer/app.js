@@ -1,10 +1,22 @@
+const invoke = window.__TAURI__.core.invoke;
+
+const panel = document.getElementById('panel');
+const list = document.getElementById('list');
+const empty = document.getElementById('empty');
+const pin = document.getElementById('pin');
+
 let doc = { version: 2, projects: [] };
 let saveFailed = false;
 
-const list = document.getElementById('list');
-const empty = document.getElementById('empty');
+// The expand/collapse decision lives in Rust, next to the real cursor. This is
+// only the mirror the CSS reacts to.
+let expanded = false;
+let pinned = localStorage.getItem('taskx:pinned') === '1';
+
 // Uncommitted text in a "what I did" box, so a re-render (move/delete/add) cannot eat it.
 const drafts = new Map();
+
+const reduceMotion = () => window.matchMedia('(prefers-reduced-motion: reduce)').matches;
 
 function newId() {
   if (crypto.randomUUID) return crypto.randomUUID();
@@ -32,13 +44,61 @@ function badgeColor(id) {
   return `hsl(${BADGE_HUES[n % BADGE_HUES.length]} 45% 42%)`;
 }
 
+/* ── panel ─────────────────────────────────────────────────────────────── */
+
+function setExpanded(next) {
+  if (next === expanded) return;
+  invoke('panel_set_expanded', { expanded: next, instant: reduceMotion() }).catch((err) => {
+    console.error('panel_set_expanded failed', err);
+  });
+}
+
+/** Never collapse under someone who is typing or holding an unsaved line. */
+function busy() {
+  const el = document.activeElement;
+  const typing = el && (el.tagName === 'INPUT' || el.tagName === 'TEXTAREA' || el.isContentEditable);
+  return Boolean(typing) || drafts.size > 0;
+}
+
+/// Pinned or mid-sentence: tell the watcher to leave the panel alone.
+function syncHold() {
+  invoke('panel_set_hold', { hold: pinned || busy() }).catch(() => {});
+}
+
+function syncPin() {
+  pin.setAttribute('aria-pressed', String(pinned));
+  pin.setAttribute('aria-label', pinned ? 'Unpin panel' : 'Pin panel open');
+  pin.title = pinned ? 'Unpin' : 'Pin open';
+  localStorage.setItem('taskx:pinned', pinned ? '1' : '0');
+}
+
+function wirePanel() {
+  syncPin();
+
+  // Focus moving in or out changes what counts as "busy".
+  document.addEventListener('focusin', () => syncHold());
+  document.addEventListener('focusout', () => setTimeout(syncHold, 0));
+
+  pin.addEventListener('click', () => {
+    pinned = !pinned;
+    syncPin();
+    syncHold();
+    if (pinned) setExpanded(true);
+  });
+
+  document.getElementById('collapse').addEventListener('click', () => setExpanded(false));
+  document.getElementById('logo').addEventListener('click', () => setExpanded(!expanded));
+}
+
+/* ── data ──────────────────────────────────────────────────────────────── */
+
 async function save() {
   try {
-    await window.taskx.save(doc);
+    await invoke('data_save', { doc });
     saveFailed = false;
     return true;
   } catch (err) {
-    if (!saveFailed) alert('Could not save: ' + err.message);
+    if (!saveFailed) alert('Could not save: ' + err);
     saveFailed = true;
     return false;
   }
@@ -62,11 +122,11 @@ function actionButton(label, ariaLabel, action, onClick) {
 
 async function moveProject(id, direction) {
   try {
-    doc = await window.taskx.move(id, direction);
+    doc = await invoke('data_move', { id, direction });
     render();
     focusAction(id, direction);
   } catch (err) {
-    alert('Could not move project: ' + err.message);
+    alert('Could not move project: ' + err);
   }
 }
 
@@ -148,10 +208,13 @@ function attachRow(project) {
   didInput.addEventListener('input', () => {
     if (didInput.value === '') drafts.delete(project.id);
     else drafts.set(project.id, didInput.value);
+    syncHold();
   });
   // Committed only on Enter: a half-typed line is never logged.
   didInput.addEventListener('keydown', (event) => {
     if (event.key === 'Escape') {
+      // Escape here is for the draft, not for closing the panel.
+      event.stopPropagation();
       if (didInput.value === '') didInput.blur();
       else { didInput.value = ''; drafts.delete(project.id); }
       return;
@@ -298,19 +361,39 @@ async function addProject() {
 }
 
 async function init() {
+  wirePanel();
+
+  // The panel decides when it expands; this only mirrors the decision into CSS.
+  await window.__TAURI__.event.listen('panel:state', (event) => {
+    expanded = Boolean(event.payload);
+    panel.classList.toggle('is-expanded', expanded);
+  });
+
+  await invoke('panel_set_reduced', { reduced: reduceMotion() });
+  syncHold();
+  // A pinned panel comes back open, because that is what pinning asked for.
+  if (pinned) invoke('panel_set_expanded', { expanded: true, instant: true }).catch(() => {});
+
   try {
-    doc = await window.taskx.load();
+    doc = await invoke('data_load');
   } catch (err) {
     doc = { version: 2, projects: [] };
-    alert('Could not load projects: ' + err.message);
+    alert('Could not load projects: ' + err);
   }
   render();
-  document.getElementById('add').addEventListener('click', addProject);
+
+  document.getElementById('add').addEventListener('click', () => { setExpanded(true); addProject(); });
   document.getElementById('add-empty').addEventListener('click', addProject);
+
   document.addEventListener('keydown', (event) => {
+    if (event.key === 'Escape') {
+      setExpanded(false);
+      return;
+    }
     if (!event.ctrlKey || event.altKey || event.shiftKey) return;
     if (event.key.toLowerCase() !== 'n') return;
     event.preventDefault();
+    setExpanded(true);
     addProject();
   });
 }

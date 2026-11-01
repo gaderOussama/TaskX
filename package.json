@@ -1,12 +1,13 @@
 {
   "name": "taskx",
   "version": "1.0.0",
-  "main": "main.js",
+  "private": true,
   "scripts": {
-    "start": "electron .",
-    "test": "node --test \"test/**/*.test.js\""
+    "dev": "tauri dev",
+    "build": "tauri build",
+    "test": "cargo test --manifest-path src-tauri/Cargo.toml"
   },
   "devDependencies": {
-    "electron": "^45.1.0"
+    "@tauri-apps/cli": "^2.12.4"
   }
 }

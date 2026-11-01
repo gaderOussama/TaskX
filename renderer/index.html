@@ -7,27 +7,44 @@
     <link rel="stylesheet" href="style.css" />
   </head>
   <body>
-    <div class="titlebar">
-      <svg class="mark" viewBox="0 0 24 24" aria-hidden="true">
-        <circle cx="12" cy="12" r="9.2" fill="none" stroke="currentColor" stroke-width="1.2" opacity=".38" />
-        <path d="M12 4.2l2.1 5.7 5.7 2.1-5.7 2.1L12 19.8l-2.1-5.7L4.2 12l5.7-2.1z" fill="currentColor" />
-      </svg>
-      <span class="appname">TaskX</span>
-      <span class="tagline">Your work, in focus.</span>
-    </div>
-    <main>
-      <div class="toolbar">
-        <button id="add" type="button">+ Add project</button>
-      </div>
-      <section class="panel">
+    <div class="panel" id="panel">
+      <header class="bar">
+        <button class="logo" id="logo" type="button" aria-label="Toggle TaskX" title="Toggle">
+          <svg class="mark" viewBox="0 0 24 24" aria-hidden="true">
+            <circle cx="12" cy="12" r="9.2" fill="none" stroke="currentColor" stroke-width="1.2" opacity=".38" />
+            <path d="M12 4.2l2.1 5.7 5.7 2.1-5.7 2.1L12 19.8l-2.1-5.7L4.2 12l5.7-2.1z" fill="currentColor" />
+          </svg>
+          <span class="appname">TaskX</span>
+        </button>
+        <div class="tools">
+          <button class="icon-btn" id="pin" type="button" aria-pressed="false" aria-label="Pin open" title="Pin open">
+            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
+              <path d="M9 3.5h6l-1 5.5 3.2 3.2H6.8L10 9z" />
+              <path d="M12 12.2V20" />
+            </svg>
+          </button>
+          <button class="icon-btn" id="collapse" type="button" aria-label="Collapse" title="Collapse">
+            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
+              <path d="M14.5 6.5L9 12l5.5 5.5" />
+            </svg>
+          </button>
+        </div>
+      </header>
+
+      <div class="panel-content" id="content">
+        <div class="toolbar">
+          <button id="add" type="button">+ Add project</button>
+        </div>
         <h2 class="section-label" id="section-label">Next up</h2>
         <div id="empty">
           <p>Nothing here yet. Add a project to keep your next step in sight.</p>
           <button id="add-empty" type="button">+ Add project</button>
         </div>
         <ul id="list"></ul>
-      </section>
-    </main>
+      </div>
+
+      <span class="edge" aria-hidden="true"></span>
+    </div>
     <script src="app.js"></script>
   </body>
 </html>
