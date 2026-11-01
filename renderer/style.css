@@ -1,17 +1,25 @@
 :root {
-  --text: #eaf2fa;
-  --text-2: #a9bacd;
-  --text-3: #859ab2;
-  --accent: #72b7f5;
-  --accent-hover: #91c9fa;
-  --line: rgba(190, 215, 240, 0.08);
+  --text: #eef4fb;
+  --text-2: #b3c3d6;
+  --text-3: #93aac4;
+  --accent: #6fb4f2;
+  --accent-hover: #93c9fa;
+  --line: rgba(150, 185, 225, 0.09);
 
-  /* The acrylic underneath already carries the frost and a navy tint; this is
-     only the extra weight needed to keep text readable over a bright desktop. */
-  --surface: rgba(7, 17, 31, 0.42);
-  --surface-strong: rgba(7, 17, 31, 0.52);
-  --border: rgba(190, 215, 240, 0.12);
-  --border-strong: rgba(190, 215, 240, 0.17);
+  /* The acrylic underneath carries the frost and the navy tint; this is only
+     the extra weight that keeps small text readable over a bright desktop. */
+  --surface: rgba(7, 17, 31, 0.38);
+  --surface-strong: rgba(7, 17, 31, 0.62);
+  --border: rgba(150, 190, 235, 0.14);
+  --border-strong: rgba(150, 190, 235, 0.19);
+  --raise: rgba(150, 190, 235, 0.05);
+  --raise-strong: rgba(150, 190, 235, 0.08);
+}
+
+/* No backdrop blur available: the surface has to carry the contrast alone. */
+:root.no-glass {
+  --surface: rgba(10, 20, 34, 0.96);
+  --surface-strong: rgba(10, 20, 34, 0.98);
 }
 
 * {
@@ -44,9 +52,9 @@ body {
   overflow: hidden;
   background-color: var(--surface);
   border: 1px solid var(--border);
-  border-left: 0;
-  border-radius: 0 18px 18px 0;
-  box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.06);
+  /* Flush strip against the screen edge: only the side that faces the desktop rounds. */
+  border-radius: 0 9px 9px 0;
+  box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.05);
   transition:
     background-color 320ms ease,
     border-color 320ms ease,
@@ -56,27 +64,25 @@ body {
 .panel.is-expanded {
   background-color: var(--surface-strong);
   border-color: var(--border-strong);
-  /* Square against the screen edge, rounded where it meets the desktop. */
-  border-radius: 0 20px 20px 0;
+  border-radius: 20px;
   box-shadow:
-    inset 0 1px 0 rgba(255, 255, 255, 0.08),
-    0 12px 50px rgba(0, 0, 0, 0.3),
-    0 0 20px rgba(100, 160, 220, 0.04);
+    inset 0 1px 0 rgba(255, 255, 255, 0.07),
+    inset 0 -1px 0 rgba(0, 0, 0, 0.35);
 }
 
 /* The only thing visible while collapsed: one faint lit edge. */
 .edge {
   position: absolute;
-  top: 14%;
-  bottom: 14%;
+  top: 16%;
+  bottom: 16%;
   right: 0;
   width: 2px;
   border-radius: 2px;
   background: linear-gradient(
     180deg,
     transparent,
-    rgba(114, 183, 245, 0.38),
-    rgba(114, 183, 245, 0.16),
+    rgba(114, 183, 245, 0.34),
+    rgba(114, 183, 245, 0.14),
     transparent
   );
   opacity: 1;
@@ -87,26 +93,28 @@ body {
   opacity: 0;
 }
 
+/* ── header ────────────────────────────────────────────────────────────── */
+
 .bar {
   display: flex;
   align-items: center;
   gap: 6px;
   flex: none;
-  height: 46px;
-  padding: 0 10px 0 16px;
+  height: 44px;
+  padding: 0 10px 0 14px;
   opacity: 0;
-  transition: opacity 160ms ease;
+  transition: opacity 150ms ease;
 }
 
 .panel.is-expanded .bar {
   opacity: 1;
-  transition-delay: 70ms;
+  transition-delay: 60ms;
 }
 
 .logo {
   display: flex;
   align-items: center;
-  gap: 9px;
+  gap: 8px;
   padding: 4px 6px 4px 0;
   font: inherit;
   color: var(--text-2);
@@ -122,30 +130,30 @@ body {
 }
 
 .mark {
-  width: 16px;
-  height: 16px;
+  width: 15px;
+  height: 15px;
   flex: none;
 }
 
 .appname {
-  font-size: 13.5px;
+  font-size: 13px;
   font-weight: 600;
   color: var(--text);
-  letter-spacing: -0.01em;
+  letter-spacing: 0.005em;
 }
 
 .tools {
   display: flex;
   align-items: center;
-  gap: 2px;
+  gap: 1px;
   margin-left: auto;
 }
 
 .icon-btn {
   display: grid;
   place-items: center;
-  width: 28px;
-  height: 28px;
+  width: 27px;
+  height: 27px;
   font: inherit;
   color: var(--text-3);
   background: transparent;
@@ -162,7 +170,7 @@ body {
 
 .icon-btn:hover {
   color: var(--text);
-  background: rgba(190, 215, 240, 0.08);
+  background: var(--raise-strong);
 }
 
 /* Pinned reads as a filled pin, not a second colour. */
@@ -175,11 +183,14 @@ body {
   fill-opacity: 0.22;
 }
 
+/* ── sections ──────────────────────────────────────────────────────────── */
+
 .panel-content {
   display: flex;
   flex-direction: column;
   flex: 1;
   min-height: 0;
+  padding: 1px 10px 12px;
   opacity: 0;
   transform: translateX(-6px);
   pointer-events: none;
@@ -195,87 +206,33 @@ body {
   transition-delay: 90ms;
 }
 
-.toolbar {
-  display: flex;
-  align-items: center;
-  justify-content: flex-end;
-  flex: none;
-  padding: 2px 16px 12px;
-}
-
-.toolbar[hidden] {
-  display: none;
-}
-
-.section-label {
+.label {
   flex: none;
   margin: 0;
-  padding: 0 16px 12px;
-  font-size: 11px;
+  padding: 0 8px 9px;
+  font-size: 10.5px;
   font-weight: 600;
-  letter-spacing: 0.13em;
+  letter-spacing: 0.14em;
   text-transform: uppercase;
   color: var(--text-3);
-  border-bottom: 1px solid var(--line);
 }
 
-.section-label[hidden] {
-  display: none;
-}
-
-#add,
-#add-empty {
-  flex: none;
-  font: inherit;
-  font-size: 12.5px;
-  font-weight: 500;
-  padding: 6px 12px;
-  color: var(--accent);
-  background: rgba(23, 52, 84, 0.72);
-  border: 1px solid rgba(114, 183, 245, 0.32);
-  border-radius: 8px;
-  cursor: pointer;
-  transition: background-color 140ms ease, border-color 140ms ease, color 140ms ease;
-}
-
-#add:hover,
-#add-empty:hover {
-  background: rgba(35, 72, 112, 0.85);
-  border-color: rgba(114, 183, 245, 0.48);
-  color: var(--accent-hover);
-}
-
-#add:focus-visible,
-#add-empty:focus-visible,
-.icon-btn:focus-visible,
-.logo:focus-visible,
-.toggle:focus-visible,
-.actions button:focus-visible {
-  outline: 2px solid rgba(234, 242, 250, 0.55);
-  outline-offset: 2px;
-}
-
-#empty {
-  display: grid;
-  place-content: center;
-  justify-items: center;
-  gap: 16px;
+.next-up {
+  display: flex;
+  flex-direction: column;
   flex: 1;
-  padding: 32px 36px;
-  text-align: center;
+  min-height: 0;
 }
 
-#empty p {
-  margin: 0;
-  max-width: 34ch;
-  font-size: 13px;
-  line-height: 1.65;
-  color: var(--text-3);
+.last-session,
+.quick-add {
+  flex: none;
+  margin-top: 14px;
+  padding-top: 12px;
+  border-top: 1px solid var(--line);
 }
 
-#empty[hidden] {
-  display: none;
-}
+/* ── project rows ──────────────────────────────────────────────────────── */
 
 #list {
   flex: 1;
@@ -291,41 +248,53 @@ body {
 }
 
 .row {
+  position: relative;
   display: grid;
-  grid-template-columns: minmax(0, 1fr) auto;
-  align-items: start;
-  gap: 4px 8px;
-  padding: 15px 14px;
-  border-top: 1px solid var(--line);
-  transition: background-color 140ms ease;
+  gap: 2px;
+  padding: 8px 10px;
+  border-radius: 10px;
+  transition: background-color 140ms ease, box-shadow 140ms ease;
 }
 
-.row:first-child {
-  border-top: none;
+.row + .row {
+  margin-top: 2px;
 }
 
-.row:hover,
+.row:hover {
+  background: var(--raise);
+}
+
 .row:focus-within {
-  background: rgba(190, 215, 240, 0.055);
+  background: var(--raise-strong);
 }
 
-.fields {
+.row.is-selected {
+  background: rgba(111, 180, 242, 0.075);
+  box-shadow: inset 2px 0 0 rgba(111, 180, 242, 0.4);
+}
+
+.row-head {
   display: flex;
-  flex-direction: column;
-  gap: 4px;
-  min-width: 0;
+  align-items: center;
+  gap: 9px;
+  padding-right: 68px;
 }
 
 .actions {
+  position: absolute;
+  top: 6px;
+  right: 6px;
   display: flex;
   gap: 1px;
   opacity: 0;
+  pointer-events: none;
   transition: opacity 140ms ease;
 }
 
 .row:hover .actions,
 .row:focus-within .actions {
   opacity: 1;
+  pointer-events: auto;
 }
 
 .actions button {
@@ -345,69 +314,11 @@ body {
 
 .actions button:hover {
   color: var(--text);
-  background: rgba(35, 59, 83, 0.62);
+  background: rgba(30, 50, 74, 0.75);
 }
 
 .actions button:last-child:hover {
   color: #f07878;
-}
-
-input {
-  width: 100%;
-  min-width: 0;
-  padding: 3px 5px;
-  font: inherit;
-  color: var(--text);
-  background: transparent;
-  border: 1px solid transparent;
-  border-radius: 8px;
-  overflow: hidden;
-  white-space: nowrap;
-  text-overflow: ellipsis;
-  transition: background-color 140ms ease, border-color 140ms ease, box-shadow 140ms ease;
-}
-
-input:hover {
-  background: rgba(190, 215, 240, 0.05);
-}
-
-input:focus {
-  outline: none;
-  background: rgba(190, 215, 240, 0.07);
-  border-color: rgba(190, 215, 240, 0.45);
-  box-shadow: 0 0 0 3px rgba(190, 215, 240, 0.1);
-}
-
-input[data-field="name"] {
-  font-size: 14.5px;
-  font-weight: 600;
-  letter-spacing: -0.005em;
-}
-
-input[data-field="next"] {
-  font-size: 13.5px;
-  font-weight: 500;
-}
-
-input::placeholder {
-  color: var(--text-3);
-}
-
-input[data-field="did"] {
-  font-size: 13px;
-  font-weight: 400;
-  color: var(--text-2);
-}
-
-.name-row {
-  display: flex;
-  align-items: center;
-  gap: 9px;
-}
-
-.name-row input {
-  flex: 1;
-  width: auto;
 }
 
 .badge {
@@ -422,94 +333,141 @@ input[data-field="did"] {
   color: #fff;
   text-transform: uppercase;
   user-select: none;
-  box-shadow: inset 0 0 0 1px rgba(255, 255, 255, 0.18);
+  box-shadow: inset 0 0 0 1px rgba(255, 255, 255, 0.16);
 }
 
-.field-line {
-  display: flex;
-  align-items: center;
-  gap: 7px;
+/* ── inputs ────────────────────────────────────────────────────────────── */
+
+input {
+  width: 100%;
+  min-width: 0;
+  padding: 3px 6px;
+  font: inherit;
+  color: var(--text);
+  background: transparent;
+  border: 1px solid transparent;
+  border-radius: 7px;
+  overflow: hidden;
+  white-space: nowrap;
+  text-overflow: ellipsis;
+  transition: background-color 140ms ease, border-color 140ms ease, box-shadow 140ms ease;
 }
 
-.field-line input {
-  flex: 1;
-  width: auto;
+input::placeholder {
+  color: var(--text-3);
 }
 
-.marker {
-  flex: none;
-  width: 13px;
-  text-align: center;
-  font-size: 12px;
-  line-height: 1;
+input:hover:not(:focus) {
+  background: var(--raise);
 }
 
-.next-row .marker {
-  color: var(--accent);
+input:focus {
+  outline: none;
+  background: rgba(190, 215, 240, 0.06);
+  border-color: rgba(150, 200, 245, 0.4);
+  box-shadow: 0 0 0 3px rgba(111, 180, 242, 0.09);
 }
 
-.did-row .marker {
+.row .name {
+  font-size: 14px;
+  font-weight: 600;
+  letter-spacing: -0.003em;
+}
+
+/* Indented to the name, so identity and task read as two ranks, not two peers. */
+.row .next {
+  margin-left: 31px;
+  width: calc(100% - 31px);
+  font-size: 12.8px;
+  font-weight: 400;
+  color: var(--text-2);
+}
+
+/* ── last session ──────────────────────────────────────────────────────── */
+
+.last-meta {
+  padding: 0 8px 5px;
+  font-size: 10.8px;
+  font-weight: 600;
+  letter-spacing: 0.07em;
+  text-transform: uppercase;
+  color: var(--text-3);
+}
+
+.last-what {
+  margin: 0;
+  padding: 0 8px;
+  font-size: 13px;
+  line-height: 1.5;
+  color: var(--text-2);
+  display: -webkit-box;
+  -webkit-line-clamp: 2;
+  -webkit-box-orient: vertical;
+  overflow: hidden;
+}
+
+.note {
+  margin: 0;
+  padding: 0 8px;
+  font-size: 12.5px;
+  line-height: 1.5;
   color: var(--text-3);
 }
 
 .toggle {
-  flex: none;
+  margin: 7px 0 0 2px;
+  padding: 3px 7px;
   font: inherit;
-  font-size: 11.5px;
-  padding: 3px 8px;
+  font-size: 11.3px;
   color: var(--text-3);
   background: transparent;
   border: 1px solid transparent;
-  border-radius: 7px;
+  border-radius: 6px;
   cursor: pointer;
-  white-space: nowrap;
   transition: color 140ms ease, background-color 140ms ease;
 }
 
 .toggle:hover {
   color: var(--text-2);
-  background: rgba(190, 215, 240, 0.06);
+  background: var(--raise);
 }
 
 .history {
-  margin: 9px 0 2px;
-  padding: 10px 12px 10px 14px;
-  max-height: 170px;
+  margin: 8px 0 0;
+  padding: 0 8px;
+  max-height: 132px;
   overflow-y: auto;
   list-style: none;
-  background: rgba(7, 17, 31, 0.3);
-  border-radius: 10px;
 }
 
 .history li {
   display: flex;
   flex-direction: column;
   gap: 3px;
-  padding-left: 4px;
 }
 
 .history li + li {
-  margin-top: 10px;
-  padding-top: 10px;
+  margin-top: 8px;
+  padding-top: 8px;
   border-top: 1px solid var(--line);
 }
 
 .history .when {
-  font-size: 11px;
-  font-weight: 500;
-  letter-spacing: 0.05em;
+  font-size: 10.5px;
+  font-weight: 600;
+  letter-spacing: 0.07em;
   text-transform: uppercase;
   color: var(--text-3);
 }
 
 .history .what {
-  font-size: 12.5px;
+  font-size: 12.4px;
   line-height: 1.45;
   color: var(--text-2);
 }
 
 .history .next {
-  font-size: 12px;
+  font-size: 11.8px;
   line-height: 1.4;
   color: var(--text-3);
 }
@@ -519,10 +477,90 @@ input[data-field="did"] {
   color: var(--accent);
 }
 
-.history[hidden],
-.toggle[hidden] {
+.history[hidden] {
   display: none;
 }
+
+/* ── quick add ─────────────────────────────────────────────────────────── */
+
+#quick {
+  padding: 9px 12px;
+  font-size: 13px;
+  background: rgba(4, 12, 24, 0.42);
+  border: 1px solid rgba(150, 190, 235, 0.13);
+  border-radius: 10px;
+}
+
+#quick:hover:not(:focus) {
+  background: rgba(4, 12, 24, 0.5);
+}
+
+#quick:focus {
+  background: rgba(4, 12, 24, 0.55);
+  border-color: rgba(111, 180, 242, 0.5);
+  box-shadow: 0 0 0 3px rgba(111, 180, 242, 0.11);
+}
+
+#quick:disabled {
+  cursor: default;
+  opacity: 0.6;
+}
+
+/* ── empty state ───────────────────────────────────────────────────────── */
+
+#empty {
+  display: grid;
+  place-content: center;
+  justify-items: center;
+  gap: 14px;
+  flex: 1;
+  padding: 24px 22px;
+  text-align: center;
+}
+
+#empty p {
+  margin: 0;
+  max-width: 30ch;
+  font-size: 12.5px;
+  line-height: 1.6;
+  color: var(--text-3);
+}
+
+#empty[hidden] {
+  display: none;
+}
+
+#add-empty {
+  font: inherit;
+  font-size: 12.5px;
+  font-weight: 500;
+  padding: 7px 13px;
+  color: var(--accent);
+  background: rgba(23, 52, 84, 0.65);
+  border: 1px solid rgba(111, 180, 242, 0.3);
+  border-radius: 9px;
+  cursor: pointer;
+  transition: background-color 140ms ease, border-color 140ms ease, color 140ms ease;
+}
+
+#add-empty:hover {
+  background: rgba(35, 72, 112, 0.8);
+  border-color: rgba(111, 180, 242, 0.45);
+  color: var(--accent-hover);
+}
+
+/* ── focus ─────────────────────────────────────────────────────────────── */
+
+.icon-btn:focus-visible,
+.logo:focus-visible,
+.toggle:focus-visible,
+.actions button:focus-visible,
+#add-empty:focus-visible {
+  outline: 2px solid rgba(160, 205, 250, 0.65);
+  outline-offset: 1px;
+}
+
+/* ── scrollbars ────────────────────────────────────────────────────────── */
 
 ::-webkit-scrollbar {
   width: 10px;
@@ -533,14 +571,14 @@ input[data-field="did"] {
 }
 
 ::-webkit-scrollbar-thumb {
-  background: rgba(190, 215, 240, 0.14);
+  background: rgba(150, 190, 235, 0.15);
   background-clip: content-box;
   border: 3px solid transparent;
   border-radius: 8px;
 }
 
 ::-webkit-scrollbar-thumb:hover {
-  background: rgba(190, 215, 240, 0.26);
+  background: rgba(150, 190, 235, 0.28);
   background-clip: content-box;
 }
 

@@ -20,6 +20,44 @@ fn data_path() -> PathBuf {
     base.join("taskx").join("data.json")
 }
 
+/// Windows paints a native caption over this window whenever it is activated,
+/// even though the window is a popup with no caption bits and DWM reports no
+/// frame. Forcing the frame and children to repaint drops it again.
+#[cfg(target_os = "windows")]
+fn drop_native_frame(window: &tauri::WebviewWindow) {
+    use windows_sys::Win32::Graphics::Gdi::{
+        RedrawWindow, RDW_ALLCHILDREN, RDW_FRAME, RDW_INVALIDATE, RDW_UPDATENOW,
+    };
+    use windows_sys::Win32::UI::WindowsAndMessaging::{
+        SetWindowPos, SWP_FRAMECHANGED, SWP_NOACTIVATE, SWP_NOMOVE, SWP_NOSIZE, SWP_NOZORDER,
+    };
+
+    if let Ok(hwnd) = window.hwnd() {
+        // SAFETY: hwnd is this app's window; a no-op frame change only makes
+        // Windows recompute the non-client area and repaint it.
+        unsafe {
+            SetWindowPos(
+                hwnd.0,
+                std::ptr::null_mut(),
+                0,
+                0,
+                0,
+                0,
+                SWP_FRAMECHANGED | SWP_NOMOVE | SWP_NOSIZE | SWP_NOZORDER | SWP_NOACTIVATE,
+            );
+            RedrawWindow(
+                hwnd.0,
+                std::ptr::null(),
+                std::ptr::null_mut(),
+                RDW_INVALIDATE | RDW_FRAME | RDW_ALLCHILDREN | RDW_UPDATENOW,
+            );
+        }
+    }
+}
+
+#[cfg(not(target_os = "windows"))]
+fn drop_native_frame(_: &tauri::WebviewWindow) {}
+
 #[tauri::command]
 fn data_load() -> Value {
     store::load(&data_path())
@@ -123,10 +161,34 @@ pub fn run() {
             // it frosts the actual desktop behind the panel.
             #[cfg(target_os = "windows")]
             {
-                if let Err(err) = window_vibrancy::apply_acrylic(&window, Some((7, 17, 31, 176))) {
-                    eprintln!("acrylic unavailable, falling back to a tinted panel: {err}");
+                if let Err(err) = window_vibrancy::apply_acrylic(&window, Some((7, 17, 31, 160))) {
+                    eprintln!("acrylic unavailable, falling back to an opaque panel: {err}");
+                    let _ = window.eval("document.documentElement.classList.add('no-glass')");
                 }
             }
+
+            // A transparent window still gets a native caption painted over it
+            // the first time Windows activates it. The caption lands a few
+            // milliseconds after the focus event, so the repair trails it.
+            drop_native_frame(&window);
+            let panel_window = window.clone();
+            window.on_window_event(move |event| match event {
+                tauri::WindowEvent::Focused(true) => {
+                    let window = panel_window.clone();
+                    std::thread::spawn(move || {
+                        for delay in [25u64, 160] {
+                            std::thread::sleep(std::time::Duration::from_millis(delay));
+                            drop_native_frame(&window);
+                        }
+                    });
+                }
+                // Closing the panel hides it; the tray keeps the app alive.
+                tauri::WindowEvent::CloseRequested { api, .. } => {
+                    api.prevent_close();
+                    let _ = panel_window.hide();
+                }
+                _ => {}
+            });
 
             use tauri_plugin_global_shortcut::GlobalShortcutExt;
             let handle = app.handle().clone();

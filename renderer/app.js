@@ -4,6 +4,8 @@ const panel = document.getElementById('panel');
 const list = document.getElementById('list');
 const empty = document.getElementById('empty');
 const pin = document.getElementById('pin');
+const last = document.getElementById('last');
+const quick = document.getElementById('quick');
 
 let doc = { version: 2, projects: [] };
 let saveFailed = false;
@@ -13,7 +15,10 @@ let saveFailed = false;
 let expanded = false;
 let pinned = localStorage.getItem('taskx:pinned') === '1';
 
-// Uncommitted text in a "what I did" box, so a re-render (move/delete/add) cannot eat it.
+// The project Last session and Quick add speak about.
+let selectedId = null;
+
+// Uncommitted text per project, so re-renders and switching projects cannot eat it.
 const drafts = new Map();
 
 const reduceMotion = () => window.matchMedia('(prefers-reduced-motion: reduce)').matches;
@@ -32,6 +37,10 @@ function stamp(at) {
 function initial(name) {
   const text = String(name ?? '').trim();
   return text ? text[0] : '•';
+}
+
+function labelOf(project) {
+  return String(project?.name ?? '').trim() || 'this project';
 }
 
 // Same id always gets the same colour, so a project is recognisable before you read it.
@@ -104,6 +113,24 @@ async function save() {
   }
 }
 
+function ordered() {
+  return doc.projects.slice().sort((a, b) => a.priority - b.priority);
+}
+
+/** Falls back to the first project, so the lower half is never blank for no reason. */
+function selected() {
+  const all = ordered();
+  return all.find((p) => p.id === selectedId) || all[0] || null;
+}
+
+function select(id) {
+  if (id === selectedId) return;
+  selectedId = id;
+  for (const row of list.children) row.classList.toggle('is-selected', row.dataset.id === id);
+  renderLast();
+  renderQuick();
+}
+
 function focusAction(id, action) {
   const row = Array.from(list.children).find((li) => li.dataset.id === id);
   const button = row && row.querySelector(`[data-action="${action}"]`);
@@ -151,13 +178,16 @@ async function deleteProject(project) {
   focusAction(nearest && nearest.dataset.id, 'delete');
 }
 
+/* ── rows ──────────────────────────────────────────────────────────────── */
+
 function attachRow(project) {
   const row = document.createElement('li');
   row.className = 'row';
   row.dataset.id = project.id;
+  row.classList.toggle('is-selected', project.id === selectedId);
 
-  const fields = document.createElement('div');
-  fields.className = 'fields';
+  const head = document.createElement('div');
+  head.className = 'row-head';
 
   const badge = document.createElement('span');
   badge.className = 'badge';
@@ -167,6 +197,7 @@ function attachRow(project) {
 
   const nameInput = document.createElement('input');
   nameInput.type = 'text';
+  nameInput.className = 'name';
   nameInput.dataset.field = 'name';
   nameInput.placeholder = 'project name';
   nameInput.value = String(project.name ?? '');
@@ -177,12 +208,11 @@ function attachRow(project) {
     save();
   });
 
-  const nameRow = document.createElement('div');
-  nameRow.className = 'name-row';
-  nameRow.append(badge, nameInput);
+  head.append(badge, nameInput);
 
   const nextInput = document.createElement('input');
   nextInput.type = 'text';
+  nextInput.className = 'next';
   nextInput.dataset.field = 'next';
   nextInput.placeholder = "what's next…";
   nextInput.value = String(project.next ?? '');
@@ -192,68 +222,77 @@ function attachRow(project) {
     save();
   });
 
-  const nextMark = document.createElement('span');
-  nextMark.className = 'marker';
-  nextMark.setAttribute('aria-hidden', 'true');
-  nextMark.textContent = '→';
+  const actions = document.createElement('div');
+  actions.className = 'actions';
+  actions.append(
+    actionButton('↑', 'Move up', 'up', () => moveProject(project.id, 'up')),
+    actionButton('↓', 'Move down', 'down', () => moveProject(project.id, 'down')),
+    actionButton('×', 'Delete project', 'delete', () => deleteProject(project)),
+  );
 
-  const nextRow = document.createElement('div');
-  nextRow.className = 'field-line next-row';
-  nextRow.append(nextMark, nextInput);
+  row.append(head, nextInput, actions);
+  row.addEventListener('focusin', () => select(project.id));
+  row.addEventListener('click', (event) => {
+    if (event.target.closest('button')) return;
+    select(project.id);
+  });
 
-  const didInput = document.createElement('input');
-  didInput.type = 'text';
-  didInput.dataset.field = 'did';
-  didInput.value = drafts.get(project.id) || '';
-  didInput.addEventListener('input', () => {
-    if (didInput.value === '') drafts.delete(project.id);
-    else drafts.set(project.id, didInput.value);
-    syncHold();
-  });
-  // Committed only on Enter: a half-typed line is never logged.
-  didInput.addEventListener('keydown', (event) => {
-    if (event.key === 'Escape') {
-      // Escape here is for the draft, not for closing the panel.
-      event.stopPropagation();
-      if (didInput.value === '') didInput.blur();
-      else { didInput.value = ''; drafts.delete(project.id); }
-      return;
-    }
-    if (event.key !== 'Enter') return;
-    event.preventDefault();
-    logEntry();
-  });
+  nameInput.setAttribute('aria-label', `Name of ${labelOf(project)}`);
+  nextInput.setAttribute('aria-label', `What's next for ${labelOf(project)}`);
+
+  return row;
+}
+
+/* ── last session ──────────────────────────────────────────────────────── */
+
+function emptyNote(text) {
+  const p = document.createElement('p');
+  p.className = 'note';
+  p.textContent = text;
+  return p;
+}
+
+function renderLast() {
+  const project = selected();
+  last.textContent = '';
+
+  if (!project) {
+    last.append(emptyNote('Add a project to start a log.'));
+    return;
+  }
+
+  const entries = project.entries || [];
+  const newest = entries[entries.length - 1];
+  if (!newest) {
+    last.append(emptyNote(`Nothing logged on ${labelOf(project)} yet.`));
+    return;
+  }
+
+  const meta = document.createElement('div');
+  meta.className = 'last-meta';
+  meta.textContent = `${labelOf(project)} · ${stamp(newest.at)}`;
+
+  const what = document.createElement('p');
+  what.className = 'last-what';
+  what.textContent = newest.text;
+
+  last.append(meta, what);
+
+  const older = entries.length - 1;
+  if (older < 1) return;
 
   const toggle = document.createElement('button');
   toggle.type = 'button';
   toggle.className = 'toggle';
-  toggle.addEventListener('click', () => {
-    history.hidden = !history.hidden;
-    toggle.setAttribute('aria-expanded', String(!history.hidden));
-    refresh();
-  });
+  toggle.textContent = `${older} earlier ▾`;
+  toggle.setAttribute('aria-expanded', 'false');
+  toggle.setAttribute('aria-label', `Show ${older} earlier entries for ${labelOf(project)}`);
 
   const history = document.createElement('ol');
   history.className = 'history';
   history.hidden = true;
 
-  const refresh = () => {
-    const entries = project.entries || [];
-    const newest = entries[entries.length - 1];
-    const label = String(project.name ?? '').trim() || 'new project';
-    didInput.placeholder = newest
-      ? `what I did — last: ${newest.text}`
-      : 'what I did — press Enter';
-    didInput.setAttribute('aria-label', `Log what I did on ${label}`);
-    nextInput.setAttribute('aria-label', `What's next for ${label}`);
-    nameInput.setAttribute('aria-label', `Name of ${label}`);
-
-    const older = Math.max(0, entries.length - 1);
-    toggle.hidden = older < 1;
-    toggle.textContent = `${older} earlier ▾`;
-    toggle.setAttribute('aria-label', `Show ${older} earlier entries for ${label}`);
-
-    if (history.hidden) return;
+  const fill = () => {
     history.textContent = '';
     for (const entry of entries.slice(0, -1).reverse()) {
       const item = document.createElement('li');
@@ -262,11 +301,11 @@ function attachRow(project) {
       when.className = 'when';
       when.textContent = stamp(entry.at);
 
-      const what = document.createElement('span');
-      what.className = 'what';
-      what.textContent = entry.text;
+      const text = document.createElement('span');
+      text.className = 'what';
+      text.textContent = entry.text;
 
-      item.append(when, what);
+      item.append(when, text);
 
       // Entries logged before this field existed simply have no next step.
       if (entry.next) {
@@ -279,65 +318,99 @@ function attachRow(project) {
     }
   };
 
-  async function logEntry() {
-    const text = didInput.value.trim();
-    if (text === '') return;
-    const entries = project.entries || [];
-    const newest = entries[entries.length - 1];
-    if (newest && newest.text === text) {
-      didInput.value = '';
-      drafts.delete(project.id);
-      return;
-    }
+  toggle.addEventListener('click', () => {
+    history.hidden = !history.hidden;
+    toggle.setAttribute('aria-expanded', String(!history.hidden));
+    toggle.textContent = history.hidden ? `${older} earlier ▾` : `${older} earlier ▴`;
+    if (!history.hidden) fill();
+  });
 
-    const snapshot = entries.slice();
-    // Keep the next step as it stood at this moment: history stays a narrative,
-    // not just a list of things that happened.
-    entries.push({ at: Date.now(), text, next: String(project.next ?? '').trim() });
-    project.updatedAt = Date.now();
-    didInput.value = '';
-    drafts.delete(project.id);
-    if (!(await save())) {
-      project.entries = snapshot;
-    }
-    refresh();
-  }
-
-  const didMark = document.createElement('span');
-  didMark.className = 'marker';
-  didMark.setAttribute('aria-hidden', 'true');
-  didMark.textContent = '✓';
-
-  const didRow = document.createElement('div');
-  didRow.className = 'field-line did-row';
-  didRow.append(didMark, didInput, toggle);
-
-  fields.append(nameRow, nextRow, didRow, history);
-
-  const actions = document.createElement('div');
-  actions.className = 'actions';
-  actions.append(
-    actionButton('↑', 'Move up', 'up', () => moveProject(project.id, 'up')),
-    actionButton('↓', 'Move down', 'down', () => moveProject(project.id, 'down')),
-    actionButton('×', 'Delete project', 'delete', () => deleteProject(project)),
-  );
-
-  row.append(fields, actions);
-  refresh();
-  return row;
+  last.append(toggle, history);
 }
 
+/* ── quick add ─────────────────────────────────────────────────────────── */
+
+function renderQuick() {
+  const project = selected();
+  quick.disabled = !project;
+  quick.value = project ? drafts.get(project.id) || '' : '';
+  quick.placeholder = project
+    ? `What did you do on ${labelOf(project)}?`
+    : 'Add a project first';
+  quick.setAttribute('aria-label', project ? `Log what I did on ${labelOf(project)}` : 'Quick add');
+}
+
+async function commit() {
+  const project = selected();
+  const text = quick.value.trim();
+  if (!project || text === '') return;
+
+  const entries = project.entries || (project.entries = []);
+  const newest = entries[entries.length - 1];
+  if (newest && newest.text === text) {
+    quick.value = '';
+    drafts.delete(project.id);
+    return;
+  }
+
+  const snapshot = entries.slice();
+  // Keep the next step as it stood at this moment: history stays a narrative,
+  // not just a list of things that happened.
+  entries.push({ at: Date.now(), text, next: String(project.next ?? '').trim() });
+  project.updatedAt = Date.now();
+  quick.value = '';
+  drafts.delete(project.id);
+  if (!(await save())) project.entries = snapshot;
+  renderLast();
+  syncHold();
+}
+
+function wireQuick() {
+  quick.addEventListener('input', () => {
+    const project = selected();
+    if (!project) return;
+    if (quick.value === '') drafts.delete(project.id);
+    else drafts.set(project.id, quick.value);
+    syncHold();
+  });
+
+  // Committed only on Enter: a half-typed line is never logged.
+  quick.addEventListener('keydown', (event) => {
+    if (event.key === 'Escape') {
+      // Escape here is for the draft, not for closing the panel.
+      event.stopPropagation();
+      if (quick.value === '') quick.blur();
+      else {
+        quick.value = '';
+        const project = selected();
+        if (project) drafts.delete(project.id);
+        syncHold();
+      }
+      return;
+    }
+    if (event.key !== 'Enter') return;
+    event.preventDefault();
+    commit();
+  });
+}
+
+/* ── render ────────────────────────────────────────────────────────────── */
+
 function render() {
-  const projects = doc.projects.slice().sort((a, b) => a.priority - b.priority);
+  const all = ordered();
+  if (!all.some((p) => p.id === selectedId)) selectedId = all[0] ? all[0].id : null;
+
   const scroll = list.scrollTop;
   list.textContent = '';
-  for (const project of projects) list.append(attachRow(project));
+  for (const project of all) list.append(attachRow(project));
   list.scrollTop = scroll;
-  empty.hidden = projects.length > 0;
-  list.hidden = projects.length === 0;
-  // Empty state carries its own call to action; the toolbar would be a second, identical one.
-  document.querySelector('.toolbar').hidden = projects.length === 0;
-  document.getElementById('section-label').hidden = projects.length === 0;
+
+  const none = all.length === 0;
+  empty.hidden = !none;
+  list.hidden = none;
+
+  renderLast();
+  renderQuick();
 }
 
 async function addProject() {
@@ -355,6 +428,7 @@ async function addProject() {
     doc.projects = snapshot;
     return;
   }
+  selectedId = project.id;
   render();
   const row = Array.from(list.children).find((li) => li.dataset.id === project.id);
   if (row) row.querySelector('input').focus();
@@ -362,6 +436,7 @@ async function addProject() {
 
 async function init() {
   wirePanel();
+  wireQuick();
 
   // The panel decides when it expands; this only mirrors the decision into CSS.
   await window.__TAURI__.event.listen('panel:state', (event) => {

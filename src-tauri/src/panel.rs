@@ -3,24 +3,30 @@ use std::sync::Mutex;
 use std::thread;
 use std::time::{Duration, Instant};
 
-use tauri::{AppHandle, Emitter, LogicalSize, Manager, WebviewWindow};
+use tauri::{AppHandle, Emitter, LogicalPosition, LogicalSize, Manager, WebviewWindow};
 
 use crate::easing::make_ease;
 
 pub const COLLAPSED_W: f64 = 18.0;
-pub const EXPANDED_W: f64 = 400.0;
+pub const EXPANDED_W: f64 = 370.0;
 const EXPAND_MS: u64 = 340;
 const COLLAPSE_MS: u64 = 280;
 const FRAME_MS: u64 = 16;
 const POINTER_MS: u64 = 20;
 const HOVER_INTENT_MS: u64 = 80;
 const LEAVE_DELAY_MS: u64 = 450;
-const LEFT_MARGIN: f64 = 0.0;
-const HEIGHT_RATIO: f64 = 0.92;
+/// Air between the floating panel and the left edge; the collapsed strip is
+/// flush instead, so opening reads as the surface lifting off the edge.
+const EDGE_GAP: f64 = 16.0;
+const MAX_HEIGHT: f64 = 580.0;
+const MIN_V_GAP: f64 = 24.0;
 
 #[derive(Clone, Copy)]
 pub struct Geometry {
+    /// Collapsed x: flush against the screen edge.
     pub x: f64,
+    /// Expanded x: the floated position.
+    pub x_open: f64,
     pub y: f64,
     pub height: f64,
     pub scale: f64,
@@ -28,6 +34,7 @@ pub struct Geometry {
 
 struct Inner {
     width: f64,
+    x: f64,
     expanded: bool,
     geometry: Geometry,
 }
@@ -54,11 +61,13 @@ impl Default for Panel {
         Self {
             inner: Mutex::new(Inner {
                 width: COLLAPSED_W,
+                x: 0.0,
                 expanded: false,
                 geometry: Geometry {
                     x: 0.0,
+                    x_open: EDGE_GAP,
                     y: 0.0,
-                    height: 660.0,
+                    height: 580.0,
                     scale: 1.0,
                 },
             }),
@@ -85,9 +94,12 @@ pub fn measure(window: &WebviewWindow) -> Geometry {
     });
     let (ax, ay, ah) = area.unwrap_or((0.0, 0.0, 1080.0));
 
-    let height = (ah * HEIGHT_RATIO).round();
+    // Tall enough to breathe, short enough to float: never taller than the
+    // screen can hold with even margins above and below.
+    let height = (ah - MIN_V_GAP * 2.0).min(MAX_HEIGHT).round();
     Geometry {
-        x: ax + LEFT_MARGIN,
+        x: ax,
+        x_open: ax + EDGE_GAP,
         y: ay + ((ah - height) / 2.0).round(),
         height,
         scale,
@@ -95,7 +107,10 @@ pub fn measure(window: &WebviewWindow) -> Geometry {
 }
 
 pub fn adopt(app: &AppHandle, geometry: Geometry) {
-    app.state::<Panel>().inner.lock().unwrap().geometry = geometry;
+    let state = app.state::<Panel>();
+    let mut inner = state.inner.lock().unwrap();
+    inner.geometry = geometry;
+    inner.x = geometry.x;
 }
 
 pub fn set_hold(app: &AppHandle, hold: bool) {
@@ -110,7 +125,7 @@ pub fn set_reduced(app: &AppHandle, reduced: bool) {
 /// away still showed a faint square. Clipping the window to the same shape
 /// removes it, and makes the rounding real for the pointer as well.
 #[cfg(target_os = "windows")]
-fn clip_to_round(window: &WebviewWindow, width: f64, height: f64, scale: f64) {
+fn clip_to_round(window: &WebviewWindow, width: f64, height: f64, x: f64, scale: f64) {
     use windows_sys::Win32::Graphics::Gdi::{CreateRoundRectRgn, SetWindowRgn};
 
     let Ok(hwnd) = window.hwnd() else {
@@ -118,14 +133,16 @@ fn clip_to_round(window: &WebviewWindow, width: f64, height: f64, scale: f64) {
     };
     let w = (width * scale).round() as i32;
     let h = (height * scale).round() as i32;
-    // CSS clamps a radius wider than the box, so the strip ends in half-pills.
-    let r = (width.min(20.0) * scale).round() as i32;
-    // The region starts at -r so the left arcs fall outside the window: square
-    // against the screen edge, rounded where it meets the desktop.
+    // Matches the CSS clamp: a strip narrower than twice the radius ends in
+    // half-pills rather than in a wedge.
+    let r = ((width / 2.0).min(20.0) * scale).round() as i32;
+    // Flush against the edge, the left corners must stay square; the arc is
+    // placed outside the window so only the right side rounds.
+    let left = if x < 0.5 { -r } else { 0 };
     // SAFETY: the region is created here and handed to the window, which owns
     // it from that moment on.
     unsafe {
-        let region = CreateRoundRectRgn(-r, 0, w + 1, h + 1, r * 2, r * 2);
+        let region = CreateRoundRectRgn(left, 0, w + 1, h + 1, r * 2, r * 2);
         if !region.is_null() {
             SetWindowRgn(hwnd.0, region, 1);
         }
@@ -133,13 +150,19 @@ fn clip_to_round(window: &WebviewWindow, width: f64, height: f64, scale: f64) {
 }
 
 #[cfg(not(target_os = "windows"))]
-fn clip_to_round(_: &WebviewWindow, _: f64, _: f64, _: f64) {}
+fn clip_to_round(_: &WebviewWindow, _: f64, _: f64, _: f64, _: f64) {}
 
 pub fn clip_now(app: &AppHandle) {
     if let Some(window) = app.get_webview_window("main") {
         let state = app.state::<Panel>();
         let inner = state.inner.lock().unwrap();
-        clip_to_round(&window, inner.width, inner.geometry.height, inner.geometry.scale);
+        clip_to_round(
+            &window,
+            inner.width,
+            inner.geometry.height,
+            inner.x,
+            inner.geometry.scale,
+        );
     }
 }
 
@@ -149,7 +172,13 @@ pub fn toggle(app: &AppHandle) {
         let expanded = state.inner.lock().unwrap().expanded;
         (expanded, state.reduced.load(Ordering::SeqCst))
     };
-    set_by_user(app, !expanded, reduced);
+    // Hidden in the tray counts as closed, whatever the last width was.
+    let hidden = app
+        .get_webview_window("main")
+        .and_then(|window| window.is_visible().ok())
+        .map(|visible| !visible)
+        .unwrap_or(false);
+    set_by_user(app, hidden || !expanded, reduced);
 }
 
 /// Closing on purpose: the pointer may still be sitting on the panel, and it
@@ -168,18 +197,29 @@ pub fn set_expanded(app: &AppHandle, expanded: bool, instant: bool) {
     let Some(window) = app.get_webview_window("main") else {
         return;
     };
+    // Closed to the tray: the window has to come back before it can grow.
+    if expanded && !window.is_visible().unwrap_or(true) {
+        let _ = window.show();
+    }
     let state = app.state::<Panel>();
 
     // Any new request invalidates the run in flight; the running frame notices
     // and stops, so the panel never fights itself.
     let generation = state.generation.fetch_add(1, Ordering::SeqCst) + 1;
 
-    let (from, to, height, scale) = {
+    let (from_w, to_w, from_x, to_x, y, height, scale) = {
         let mut inner = state.inner.lock().unwrap();
         inner.expanded = expanded;
         (
             inner.width,
             if expanded { EXPANDED_W } else { COLLAPSED_W },
+            inner.x,
+            if expanded {
+                inner.geometry.x_open
+            } else {
+                inner.geometry.x
+            },
+            inner.geometry.y,
             inner.geometry.height,
             inner.geometry.scale,
         )
@@ -189,10 +229,18 @@ pub fn set_expanded(app: &AppHandle, expanded: bool, instant: bool) {
     // same movement, not to a later round trip.
     let _ = app.emit("panel:state", expanded);
 
-    if instant || (to - from).abs() < 0.5 {
-        state.inner.lock().unwrap().width = to;
-        let _ = window.set_size(LogicalSize::new(to, height));
-        clip_to_round(&window, to, height, scale);
+    // Width and x travel together, so the panel lifts off the edge instead of
+    // growing out of it.
+    let settle = |inner: &mut Inner, width: f64, x: f64| {
+        inner.width = width;
+        inner.x = x;
+    };
+
+    if instant || (to_w - from_w).abs() < 0.5 {
+        settle(&mut state.inner.lock().unwrap(), to_w, to_x);
+        let _ = window.set_size(LogicalSize::new(to_w, height));
+        let _ = window.set_position(LogicalPosition::new(to_x, y));
+        clip_to_round(&window, to_w, height, to_x, scale);
         return;
     }
 
@@ -215,12 +263,15 @@ pub fn set_expanded(app: &AppHandle, expanded: bool, instant: bool) {
             }
 
             let progress = (start.elapsed().as_secs_f64() / duration.as_secs_f64()).min(1.0);
-            let width = from + (to - from) * ease(progress);
-            state.inner.lock().unwrap().width = width;
+            let eased = ease(progress);
+            let width = from_w + (to_w - from_w) * eased;
+            let x = from_x + (to_x - from_x) * eased;
+            settle(&mut state.inner.lock().unwrap(), width, x);
 
             if let Some(window) = app.get_webview_window("main") {
                 let _ = window.set_size(LogicalSize::new(width, height));
-                clip_to_round(&window, width, height, scale);
+                let _ = window.set_position(LogicalPosition::new(x, y));
+                clip_to_round(&window, width, height, x, scale);
             }
             if progress >= 1.0 {
                 break;
@@ -262,7 +313,8 @@ pub fn start_pointer_watch(app: AppHandle) {
             let (inside, expanded, width) = {
                 let inner = state.inner.lock().unwrap();
                 let g = inner.geometry;
-                let (x0, y0) = (g.x * g.scale, g.y * g.scale);
+                let x0 = inner.x * g.scale;
+                let y0 = g.y * g.scale;
                 let (w, h) = (inner.width * g.scale, g.height * g.scale);
                 let inside = (x as f64) >= x0
                     && (y as f64) >= y0

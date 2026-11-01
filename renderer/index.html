@@ -17,6 +17,11 @@
           <span class="appname">TaskX</span>
         </button>
         <div class="tools">
+          <button class="icon-btn" id="add" type="button" aria-label="Add project" title="Add project">
+            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" aria-hidden="true">
+              <path d="M12 5.5v13M5.5 12h13" />
+            </svg>
+          </button>
           <button class="icon-btn" id="pin" type="button" aria-pressed="false" aria-label="Pin open" title="Pin open">
             <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
               <path d="M9 3.5h6l-1 5.5 3.2 3.2H6.8L10 9z" />
@@ -31,16 +36,31 @@
         </div>
       </header>
 
-      <div class="panel-content" id="content">
-        <div class="toolbar">
-          <button id="add" type="button">+ Add project</button>
-        </div>
-        <h2 class="section-label" id="section-label">Next up</h2>
-        <div id="empty">
-          <p>Nothing here yet. Add a project to keep your next step in sight.</p>
-          <button id="add-empty" type="button">+ Add project</button>
-        </div>
-        <ul id="list"></ul>
+      <div class="panel-content">
+        <section class="next-up">
+          <h2 class="label">Next up</h2>
+          <ul id="list"></ul>
+          <div id="empty" hidden>
+            <p>No projects yet. Add one and keep your next step in sight.</p>
+            <button id="add-empty" type="button">Add a project</button>
+          </div>
+        </section>
+
+        <section class="last-session">
+          <h2 class="label">Last session</h2>
+          <div id="last"></div>
+        </section>
+
+        <section class="quick-add">
+          <h2 class="label">Quick add</h2>
+          <input
+            id="quick"
+            type="text"
+            autocomplete="off"
+            spellcheck="false"
+            placeholder="What did you do?"
+          />
+        </section>
       </div>
 
       <span class="edge" aria-hidden="true"></span>
