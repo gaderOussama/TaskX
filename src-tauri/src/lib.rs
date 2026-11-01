@@ -78,8 +78,8 @@ fn data_move(id: String, direction: String) -> Result<Value, String> {
 }
 
 #[tauri::command]
-fn panel_set_expanded(app: AppHandle, expanded: bool, instant: bool) {
-    panel::set_by_user(&app, expanded, instant);
+fn panel_set_mode(app: AppHandle, mode: String, instant: bool) {
+    panel::set_by_user(&app, panel::Mode::parse(&mode), instant);
 }
 
 /// Pinned, or the user is typing: the watcher must not collapse on its own.
@@ -127,7 +127,7 @@ fn build_tray(app: &AppHandle) -> tauri::Result<()> {
 pub fn run() {
     tauri::Builder::default()
         .plugin(tauri_plugin_single_instance::init(|app, _argv, _cwd| {
-            panel::set_expanded(app, true, false);
+            panel::set_by_user(app, panel::Mode::Popover, false);
         }))
         .plugin(tauri_plugin_autostart::init(
             tauri_plugin_autostart::MacosLauncher::LaunchAgent,
@@ -139,7 +139,7 @@ pub fn run() {
             data_load,
             data_save,
             data_move,
-            panel_set_expanded,
+            panel_set_mode,
             panel_set_hold,
             panel_set_reduced
         ])
@@ -149,27 +149,16 @@ pub fn run() {
                 .expect("the panel window is declared in tauri.conf.json");
 
             let geometry = panel::measure(&window);
-            window.set_size(tauri::LogicalSize::new(
-                panel::COLLAPSED_W,
-                geometry.height,
-            ))?;
-            window.set_position(tauri::LogicalPosition::new(geometry.x, geometry.y))?;
+            let (width, height, y) = panel::Mode::Circle.frame(&geometry);
+            window.set_size(tauri::LogicalSize::new(width, height))?;
+            window.set_position(tauri::LogicalPosition::new(geometry.x, y))?;
             panel::adopt(app.handle(), geometry);
             panel::clip_now(app.handle());
 
             // Acrylic is the whole reason this is not a web page in a rectangle:
-            // it frosts the actual desktop behind the panel.
-            #[cfg(target_os = "windows")]
-            {
-                if let Err(err) = window_vibrancy::apply_acrylic(&window, Some((7, 17, 31, 160))) {
-                    eprintln!("acrylic unavailable, falling back to an opaque panel: {err}");
-                    let _ = window.eval("document.documentElement.classList.add('no-glass')");
-                }
-            }
-
-            // A transparent window still gets a native caption painted over it
-            // the first time Windows activates it. The caption lands a few
-            // milliseconds after the focus event, so the repair trails it.
+            // it frosts the actual desktop behind the panel. It is switched on
+            // when a card opens (see panel::set_mode) because Windows paints it
+            // across the full rectangle, square corners and all.
             drop_native_frame(&window);
             let panel_window = window.clone();
             window.on_window_event(move |event| match event {

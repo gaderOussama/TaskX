@@ -1,6 +1,5 @@
 const invoke = window.__TAURI__.core.invoke;
 
-const panel = document.getElementById('panel');
 const list = document.getElementById('list');
 const empty = document.getElementById('empty');
 const pin = document.getElementById('pin');
@@ -11,8 +10,8 @@ let doc = { version: 2, projects: [] };
 let saveFailed = false;
 
 // The expand/collapse decision lives in Rust, next to the real cursor. This is
-// only the mirror the CSS reacts to.
-let expanded = false;
+// only the mirror the CSS reacts to: circle, popover or the full panel.
+let mode = document.documentElement.dataset.mode || 'circle';
 let pinned = localStorage.getItem('taskx:pinned') === '1';
 
 // The project Last session and Quick add speak about.
@@ -55,10 +54,12 @@ function badgeColor(id) {
 
 /* ── panel ─────────────────────────────────────────────────────────────── */
 
-function setExpanded(next) {
-  if (next === expanded) return;
-  invoke('panel_set_expanded', { expanded: next, instant: reduceMotion() }).catch((err) => {
-    console.error('panel_set_expanded failed', err);
+function setMode(next) {
+  if (next === mode) return;
+  mode = next;
+  document.documentElement.dataset.mode = next;
+  invoke('panel_set_mode', { mode: next, instant: reduceMotion() }).catch((err) => {
+    console.error('panel_set_mode failed', err);
   });
 }
 
@@ -92,11 +93,14 @@ function wirePanel() {
     pinned = !pinned;
     syncPin();
     syncHold();
-    if (pinned) setExpanded(true);
+    if (pinned) setMode('panel');
   });
 
-  document.getElementById('collapse').addEventListener('click', () => setExpanded(false));
-  document.getElementById('logo').addEventListener('click', () => setExpanded(!expanded));
+  document.getElementById('collapse').addEventListener('click', () => setMode('circle'));
+  document.getElementById('expand').addEventListener('click', () => setMode('panel'));
+  document.getElementById('logo').addEventListener('click', () => {
+    setMode(mode === 'circle' ? 'popover' : 'circle');
+  });
 }
 
 /* ── data ──────────────────────────────────────────────────────────────── */
@@ -438,16 +442,16 @@ async function init() {
   wirePanel();
   wireQuick();
 
-  // The panel decides when it expands; this only mirrors the decision into CSS.
+  // The panel decides when it opens; this only mirrors the decision into CSS.
   await window.__TAURI__.event.listen('panel:state', (event) => {
-    expanded = Boolean(event.payload);
-    panel.classList.toggle('is-expanded', expanded);
+    mode = String(event.payload);
+    document.documentElement.dataset.mode = mode;
   });
 
   await invoke('panel_set_reduced', { reduced: reduceMotion() });
   syncHold();
   // A pinned panel comes back open, because that is what pinning asked for.
-  if (pinned) invoke('panel_set_expanded', { expanded: true, instant: true }).catch(() => {});
+  if (pinned) invoke('panel_set_mode', { mode: 'panel', instant: true }).catch(() => {});
 
   try {
     doc = await invoke('data_load');
@@ -457,18 +461,18 @@ async function init() {
   }
   render();
 
-  document.getElementById('add').addEventListener('click', () => { setExpanded(true); addProject(); });
+  document.getElementById('add').addEventListener('click', () => { setMode('panel'); addProject(); });
   document.getElementById('add-empty').addEventListener('click', addProject);
 
   document.addEventListener('keydown', (event) => {
     if (event.key === 'Escape') {
-      setExpanded(false);
+      setMode('circle');
       return;
     }
     if (!event.ctrlKey || event.altKey || event.shiftKey) return;
     if (event.key.toLowerCase() !== 'n') return;
     event.preventDefault();
-    setExpanded(true);
+    setMode('panel');
     addProject();
   });
 }

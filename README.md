@@ -18,15 +18,17 @@ Requires the Rust toolchain and the MSVC build tools; WebView2 ships with Window
 
 ## Using it
 
-- Move the pointer onto the strip on the left edge: the panel opens after 80 ms and lifts 16 px off the edge into a floating card.
-- Move away: it closes after 450 ms. Come back while it is closing and it reverses from where it is.
+- A small circle with the Northstar mark sits off the left edge, halfway down. That is TaskX at rest.
+- Point at it (or press `Alt+X`): after 80 ms it opens into a small card holding the selected project, its next step and one log field. Nothing else.
+- The arrows in the card's header open the full panel: next up, the last session, quick add.
+- Move away: the card closes back to the circle after 450 ms. Come back while it is closing and it reverses from where it is.
 - It never closes under you while you are typing or while a half-typed log line is uncommitted.
-- The panel reads top to bottom: next up, the last session of the selected project, then one quick-add field. Clicking a project selects it; `Enter` in quick add commits the line to it.
-- The pin in the header keeps it open. The chevron closes it. Closing with Alt+F4 hides it to the notification area.
-- `Alt+X` toggles it from anywhere. The notification-area icon does the same, and offers Quit.
-- `Ctrl+N` adds a project, `Enter` commits a log line, `Escape` drops a half-typed one and closes the panel.
+- In the full panel, clicking a project selects it; `Enter` in quick add commits the line to it.
+- The pin in the panel header keeps it open. The chevron closes it. Closing with Alt+F4 hides it to the notification area.
+- `Alt+X` toggles the circle from anywhere. The notification-area icon does the same, and offers Quit.
+- `Ctrl+N` adds a project, `Enter` commits a log line, `Escape` drops a half-typed one and closes the card.
 
-The panel keeps a single instance running; starting it again just opens it. It is always above other windows and never appears in the taskbar. Its size, position and corner radius are constants at the top of `src-tauri/src/panel.rs`; the window is clipped to the same rounded shape so the acrylic never shows a square corner.
+The panel keeps a single instance running; starting it again just opens it. It is always above other windows and never appears in the taskbar. Its sizes, position and corner radius are in `src-tauri/src/panel.rs`; the window is clipped to the same shape, so the circle is a real circle for the pointer too. Backdrop blur is switched on only while a card is open: Windows paints acrylic across the whole window rectangle and ignores that clip, which would leave a square behind the circle.
 
 ## Where your data lives
 
