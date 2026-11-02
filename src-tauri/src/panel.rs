@@ -9,6 +9,10 @@ use crate::easing::make_ease;
 
 /// Closed: one square tile carrying the mark.
 pub const ORB: f64 = 56.0;
+/// Reached by resting on the tile: the card's top-left slice, clipped by the
+/// window so hovering costs a strip of the screen instead of a whole card.
+pub const PEEK_W: f64 = 104.0;
+pub const PEEK_H: f64 = 104.0;
 /// First open: a small card holding the selected project and the log field.
 pub const POPOVER_W: f64 = 320.0;
 pub const POPOVER_H: f64 = 190.0;
@@ -28,6 +32,7 @@ const MIN_V_GAP: f64 = 24.0;
 #[derive(Clone, Copy, PartialEq, Eq)]
 pub enum Mode {
     Circle,
+    Peek,
     Popover,
     Panel,
 }
@@ -36,6 +41,7 @@ impl Mode {
     pub fn key(self) -> &'static str {
         match self {
             Mode::Circle => "circle",
+            Mode::Peek => "peek",
             Mode::Popover => "popover",
             Mode::Panel => "panel",
         }
@@ -45,6 +51,7 @@ impl Mode {
         match key {
             "panel" => Mode::Panel,
             "popover" => Mode::Popover,
+            "peek" => Mode::Peek,
             _ => Mode::Circle,
         }
     }
@@ -57,6 +64,7 @@ impl Mode {
     pub fn frame(self, geometry: &Geometry) -> (f64, f64, f64) {
         match self {
             Mode::Circle => (ORB, ORB, geometry.orb_y),
+            Mode::Peek => (PEEK_W, PEEK_H, geometry.orb_y + (ORB - PEEK_H) / 2.0),
             Mode::Popover => (POPOVER_W, POPOVER_H, geometry.popover_y),
             Mode::Panel => (EXPANDED_W, geometry.height, geometry.panel_y),
         }
@@ -367,13 +375,13 @@ pub fn start_pointer_watch(app: AppHandle) {
                 // fresh approach waits for intent so a passing pointer is ignored.
                 if mid {
                     enter_since = None;
-                    set_mode(&app, Mode::Popover, reduced);
+                    set_mode(&app, Mode::Peek, reduced);
                     continue;
                 }
                 let since = *enter_since.get_or_insert_with(Instant::now);
                 if since.elapsed() >= Duration::from_millis(HOVER_INTENT_MS) {
                     enter_since = None;
-                    set_mode(&app, Mode::Popover, reduced);
+                    set_mode(&app, Mode::Peek, reduced);
                 }
             } else {
                 enter_since = None;

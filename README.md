@@ -21,9 +21,10 @@ Requires the Rust toolchain and the MSVC build tools; WebView2 ships with Window
 ## Using it
 
 - A square tile with the Northstar mark sits off the left edge, halfway down. That is TaskX at rest.
-- Point at it (or press `Alt+X`): after 80 ms it opens into a small card holding the selected project, its next step and one log field. Nothing else.
+- Point at it: after 80 ms it peeks out as a strip showing the selected project. That strip is all hovering ever costs you.
+- Click the strip (or press `Alt+X`) for the card: the project, its next step and one log field. Nothing else.
 - The arrows in the card's header open the full panel: next up, the last session, quick add.
-- Move away: the card closes back to the tile after 450 ms. Come back while it is closing and it reverses from where it is.
+- Move away: it closes back to the tile after 450 ms. Come back while it is closing and it reverses from where it is.
 - It never closes under you while you are typing or while a half-typed log line is uncommitted.
 - In the full panel, clicking a project selects it; `Enter` in quick add commits the line to it.
 - The pin in the panel header keeps it open. The chevron closes it. Closing with Alt+F4 hides it to the notification area.

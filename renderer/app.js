@@ -47,10 +47,18 @@ function labelOf(project) {
 function setMode(next) {
   if (next === mode) return;
   mode = next;
-  document.documentElement.dataset.mode = next;
+  applyMode(next);
   invoke('panel_set_mode', { mode: next, instant: reduceMotion() }).catch((err) => {
     console.error('panel_set_mode failed', err);
   });
+}
+
+/// The peek is the card clipped by a narrower window, so it borrows the card's
+/// layout and only marks itself as clipped.
+function applyMode(next) {
+  const html = document.documentElement;
+  html.dataset.mode = next === 'peek' ? 'popover' : next;
+  html.dataset.peek = next === 'peek' ? '1' : '0';
 }
 
 /** Never collapse under someone who is typing or holding an unsaved line. */
@@ -89,7 +97,15 @@ function wirePanel() {
   document.getElementById('collapse').addEventListener('click', () => setMode('circle'));
   document.getElementById('expand').addEventListener('click', () => setMode('panel'));
   document.getElementById('logo').addEventListener('click', () => {
+    if (mode === 'peek') {
+      setMode('popover');
+      return;
+    }
     setMode(mode === 'circle' ? 'popover' : 'circle');
+  });
+  // Anywhere on the peek strip asks for the whole card.
+  document.getElementById('panel').addEventListener('click', () => {
+    if (mode === 'peek') setMode('popover');
   });
 }
 
@@ -434,7 +450,7 @@ async function init() {
   // The panel decides when it opens; this only mirrors the decision into CSS.
   await window.__TAURI__.event.listen('panel:state', (event) => {
     mode = String(event.payload);
-    document.documentElement.dataset.mode = mode;
+    applyMode(mode);
   });
 
   await invoke('panel_set_reduced', { reduced: reduceMotion() });
