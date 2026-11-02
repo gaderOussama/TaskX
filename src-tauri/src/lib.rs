@@ -149,9 +149,9 @@ pub fn run() {
                 .expect("the panel window is declared in tauri.conf.json");
 
             let geometry = panel::measure(&window);
-            let (width, height, y) = panel::Mode::Circle.frame(&geometry);
+            let (width, height, x, y) = panel::Mode::Circle.frame(&geometry);
             window.set_size(tauri::LogicalSize::new(width, height))?;
-            window.set_position(tauri::LogicalPosition::new(geometry.x, y))?;
+            window.set_position(tauri::LogicalPosition::new(x, y))?;
             panel::adopt(app.handle(), geometry);
 
             // A transparent window still gets a native caption painted over it

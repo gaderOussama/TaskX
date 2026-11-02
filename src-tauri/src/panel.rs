@@ -9,10 +9,6 @@ use crate::easing::make_ease;
 
 /// Closed: one square tile carrying the mark.
 pub const ORB: f64 = 56.0;
-/// Reached by resting on the tile: the card's top-left slice, clipped by the
-/// window so hovering costs a strip of the screen instead of a whole card.
-pub const PEEK_W: f64 = 104.0;
-pub const PEEK_H: f64 = 104.0;
 /// First open: a small card holding the selected project and the log field.
 pub const POPOVER_W: f64 = 320.0;
 pub const POPOVER_H: f64 = 190.0;
@@ -32,7 +28,6 @@ const MIN_V_GAP: f64 = 24.0;
 #[derive(Clone, Copy, PartialEq, Eq)]
 pub enum Mode {
     Circle,
-    Peek,
     Popover,
     Panel,
 }
@@ -41,7 +36,6 @@ impl Mode {
     pub fn key(self) -> &'static str {
         match self {
             Mode::Circle => "circle",
-            Mode::Peek => "peek",
             Mode::Popover => "popover",
             Mode::Panel => "panel",
         }
@@ -51,7 +45,6 @@ impl Mode {
         match key {
             "panel" => Mode::Panel,
             "popover" => Mode::Popover,
-            "peek" => Mode::Peek,
             _ => Mode::Circle,
         }
     }
@@ -60,13 +53,13 @@ impl Mode {
         self != Mode::Circle
     }
 
-    /// Width, height and top edge of this mode.
-    pub fn frame(self, geometry: &Geometry) -> (f64, f64, f64) {
+    /// Width, height, left edge and top edge of this mode. Only the resting tile
+    /// sits out past the screen edge; the cards open at the panel's inset.
+    pub fn frame(self, geometry: &Geometry) -> (f64, f64, f64, f64) {
         match self {
-            Mode::Circle => (ORB, ORB, geometry.orb_y),
-            Mode::Peek => (PEEK_W, PEEK_H, geometry.orb_y + (ORB - PEEK_H) / 2.0),
-            Mode::Popover => (POPOVER_W, POPOVER_H, geometry.popover_y),
-            Mode::Panel => (EXPANDED_W, geometry.height, geometry.panel_y),
+            Mode::Circle => (ORB, ORB, geometry.orb_x, geometry.orb_y),
+            Mode::Popover => (POPOVER_W, POPOVER_H, geometry.x, geometry.popover_y),
+            Mode::Panel => (EXPANDED_W, geometry.height, geometry.x, geometry.panel_y),
         }
     }
 
@@ -75,6 +68,7 @@ impl Mode {
 #[derive(Clone, Copy)]
 pub struct Geometry {
     pub x: f64,
+    pub orb_x: f64,
     pub panel_y: f64,
     pub orb_y: f64,
     pub popover_y: f64,
@@ -119,6 +113,7 @@ impl Default for Panel {
                 mode: Mode::Circle,
                 geometry: Geometry {
                     x: 0.0,
+                    orb_x: 0.0,
                     panel_y: 0.0,
                     orb_y: 0.0,
                     popover_y: 0.0,
@@ -157,6 +152,8 @@ pub fn measure(window: &WebviewWindow) -> Geometry {
     let popover_y = (orb_y + ORB / 2.0 - POPOVER_H / 2.0).round();
     Geometry {
         x: ax + EDGE_GAP,
+        // Half the tile hangs past the screen edge: present, but not in the way.
+        orb_x: ax - ORB / 2.0,
         panel_y: ay + ((ah - height) / 2.0).round(),
         orb_y,
         popover_y,
@@ -168,11 +165,11 @@ pub fn measure(window: &WebviewWindow) -> Geometry {
 pub fn adopt(app: &AppHandle, geometry: Geometry) {
     let state = app.state::<Panel>();
     let mut inner = state.inner.lock().unwrap();
-    let (width, height, y) = Mode::Circle.frame(&geometry);
+    let (width, height, x, y) = Mode::Circle.frame(&geometry);
     inner.geometry = geometry;
     inner.width = width;
     inner.height = height;
-    inner.x = geometry.x;
+    inner.x = x;
     inner.y = y;
     inner.mode = Mode::Circle;
 }
@@ -237,18 +234,19 @@ pub fn set_mode(app: &AppHandle, mode: Mode, instant: bool) {
     // and stops, so the panel never fights itself.
     let generation = state.generation.fetch_add(1, Ordering::SeqCst) + 1;
 
-    let (from_w, from_h, from_y, to_w, to_h, to_y, x) = {
+    let (from_w, from_h, from_x, from_y, to_w, to_h, to_x, to_y) = {
         let mut inner = state.inner.lock().unwrap();
-        let (width, height, y) = mode.frame(&inner.geometry);
+        let (width, height, x, y) = mode.frame(&inner.geometry);
         inner.mode = mode;
         (
             inner.width,
             inner.height,
+            inner.x,
             inner.y,
             width,
             height,
+            x,
             y,
-            inner.x,
         )
     };
 
@@ -256,18 +254,20 @@ pub fn set_mode(app: &AppHandle, mode: Mode, instant: bool) {
     // same movement, not to a later round trip.
     let _ = app.emit("panel:state", mode.key());
 
-    let settle = |inner: &mut Inner, width: f64, height: f64, y: f64| {
+    let settle = |inner: &mut Inner, width: f64, height: f64, x: f64, y: f64| {
         inner.width = width;
         inner.height = height;
+        inner.x = x;
         inner.y = y;
     };
 
     let still = (to_w - from_w).abs() < 0.5
         && (to_h - from_h).abs() < 0.5
+        && (to_x - from_x).abs() < 0.5
         && (to_y - from_y).abs() < 0.5;
     if instant || still {
-        settle(&mut state.inner.lock().unwrap(), to_w, to_h, to_y);
-        apply(&window, to_w, to_h, x, to_y);
+        settle(&mut state.inner.lock().unwrap(), to_w, to_h, to_x, to_y);
+        apply(&window, to_w, to_h, to_x, to_y);
         return;
     }
 
@@ -287,7 +287,6 @@ pub fn set_mode(app: &AppHandle, mode: Mode, instant: bool) {
 
             let state = app.state::<Panel>();
             if state.generation.load(Ordering::SeqCst) != generation {
-                eprintln!("[tween abort] gen={generation}");
                 return;
             }
 
@@ -295,8 +294,9 @@ pub fn set_mode(app: &AppHandle, mode: Mode, instant: bool) {
             let eased = ease(progress);
             let width = from_w + (to_w - from_w) * eased;
             let height = from_h + (to_h - from_h) * eased;
+            let x = from_x + (to_x - from_x) * eased;
             let y = from_y + (to_y - from_y) * eased;
-            settle(&mut state.inner.lock().unwrap(), width, height, y);
+            settle(&mut state.inner.lock().unwrap(), width, height, x, y);
 
             if let Some(window) = app.get_webview_window("main") {
                 apply(&window, width, height, x, y);
@@ -308,7 +308,7 @@ pub fn set_mode(app: &AppHandle, mode: Mode, instant: bool) {
         // A resize can be coalesced away under the tween's frame rate; landing
         // the final size once more keeps the webview's bounds in step with it.
         if let Some(window) = app.get_webview_window("main") {
-            apply(&window, to_w, to_h, x, to_y);
+            apply(&window, to_w, to_h, to_x, to_y);
         }
     });
 }
@@ -375,13 +375,13 @@ pub fn start_pointer_watch(app: AppHandle) {
                 // fresh approach waits for intent so a passing pointer is ignored.
                 if mid {
                     enter_since = None;
-                    set_mode(&app, Mode::Peek, reduced);
+                    set_mode(&app, Mode::Popover, reduced);
                     continue;
                 }
                 let since = *enter_since.get_or_insert_with(Instant::now);
                 if since.elapsed() >= Duration::from_millis(HOVER_INTENT_MS) {
                     enter_since = None;
-                    set_mode(&app, Mode::Peek, reduced);
+                    set_mode(&app, Mode::Popover, reduced);
                 }
             } else {
                 enter_since = None;

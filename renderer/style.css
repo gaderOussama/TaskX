@@ -265,23 +265,6 @@ html[data-mode="popover"] .quick-add {
   margin-top: auto;
 }
 
-/* Hovering earns a slice of the card, not the card: the layout keeps its full
-   width and the window clips it, so nothing reflows and no more than a strip
-   lands on the screen. Clicking the slice opens the whole card. */
-html[data-peek="1"] .panel {
-  width: 320px;
-}
-
-html[data-peek="1"] .quick-add {
-  display: none;
-}
-
-/* The slice carries the mark and the project, not half a wordmark. */
-html[data-peek="1"] .appname {
-  display: none;
-}
-
-
 /* â”€â”€ project rows â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€ */
 
 #list {
