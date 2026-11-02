@@ -42,16 +42,6 @@ function labelOf(project) {
   return String(project?.name ?? '').trim() || 'this project';
 }
 
-// Same id always gets the same colour, so a project is recognisable before you read it.
-// Fixed hues rather than a free-running hash: neighbours must be told apart at a
-// glance, and a hash alone can land two ids on the same purple.
-const BADGE_HUES = [212, 268, 158, 30, 350, 190, 96, 300];
-function badgeColor(id) {
-  let n = 0;
-  for (const ch of String(id)) n = (n * 31 + ch.codePointAt(0)) % 9973;
-  return `hsl(${BADGE_HUES[n % BADGE_HUES.length]} 45% 42%)`;
-}
-
 /* ── panel ─────────────────────────────────────────────────────────────── */
 
 function setMode(next) {
@@ -196,7 +186,6 @@ function attachRow(project) {
   const badge = document.createElement('span');
   badge.className = 'badge';
   badge.setAttribute('aria-hidden', 'true');
-  badge.style.background = badgeColor(project.id);
   badge.textContent = initial(project.name);
 
   const nameInput = document.createElement('input');

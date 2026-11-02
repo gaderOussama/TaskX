@@ -153,12 +153,10 @@ pub fn run() {
             window.set_size(tauri::LogicalSize::new(width, height))?;
             window.set_position(tauri::LogicalPosition::new(geometry.x, y))?;
             panel::adopt(app.handle(), geometry);
-            panel::clip_now(app.handle());
 
-            // Acrylic is the whole reason this is not a web page in a rectangle:
-            // it frosts the actual desktop behind the panel. It is switched on
-            // when a card opens (see panel::set_mode) because Windows paints it
-            // across the full rectangle, square corners and all.
+            // A transparent window still gets a native caption painted over it
+            // the first time Windows activates it. The caption lands a few
+            // milliseconds after the focus event, so the repair trails it.
             drop_native_frame(&window);
             let panel_window = window.clone();
             window.on_window_event(move |event| match event {

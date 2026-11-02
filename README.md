@@ -2,7 +2,9 @@
 
 ## What it is
 
-A piece of translucent glass attached to the left edge of the desktop. It sits there as a thin lit strip, opens when you move towards it, and shows your projects in the priority order you set. Each project keeps a log of what you did on it — every entry stays, dated, forever — plus the one line saying what's next.
+A small, sharp-cornered panel that floats off the left edge of the desktop. It sits there as one square tile, opens when you move towards it, and shows your projects in the priority order you set. Each project keeps a log of what you did on it — every entry stays, dated, forever — plus the one line saying what's next.
+
+The look is deliberately plain: solid surfaces, hairline borders, one accent colour, no blur, no gradients, no shadows. Dark, always — it does not follow the Windows app theme.
 
 ## Run it
 
@@ -18,17 +20,17 @@ Requires the Rust toolchain and the MSVC build tools; WebView2 ships with Window
 
 ## Using it
 
-- A small circle with the Northstar mark sits off the left edge, halfway down. That is TaskX at rest.
+- A square tile with the Northstar mark sits off the left edge, halfway down. That is TaskX at rest.
 - Point at it (or press `Alt+X`): after 80 ms it opens into a small card holding the selected project, its next step and one log field. Nothing else.
 - The arrows in the card's header open the full panel: next up, the last session, quick add.
-- Move away: the card closes back to the circle after 450 ms. Come back while it is closing and it reverses from where it is.
+- Move away: the card closes back to the tile after 450 ms. Come back while it is closing and it reverses from where it is.
 - It never closes under you while you are typing or while a half-typed log line is uncommitted.
 - In the full panel, clicking a project selects it; `Enter` in quick add commits the line to it.
 - The pin in the panel header keeps it open. The chevron closes it. Closing with Alt+F4 hides it to the notification area.
-- `Alt+X` toggles the circle from anywhere. The notification-area icon does the same, and offers Quit.
+- `Alt+X` toggles the tile from anywhere. The notification-area icon does the same, and offers Quit.
 - `Ctrl+N` adds a project, `Enter` commits a log line, `Escape` drops a half-typed one and closes the card.
 
-The panel keeps a single instance running; starting it again just opens it. It is always above other windows and never appears in the taskbar. Its sizes, position and corner radius are in `src-tauri/src/panel.rs`; the window is clipped to the same shape, so the circle is a real circle for the pointer too. Backdrop blur is switched on only while a card is open: Windows paints acrylic across the whole window rectangle and ignores that clip, which would leave a square behind the circle.
+The panel keeps a single instance running; starting it again just opens it. It is always above other windows and never appears in the taskbar. Its sizes and position are constants in `src-tauri/src/panel.rs`. Nothing is composited behind it: the surfaces are opaque, which is what makes the design hold on Windows 10 without acrylic, Mica or `backdrop-filter`.
 
 ## Where your data lives
 

@@ -7,7 +7,7 @@ use tauri::{AppHandle, Emitter, LogicalPosition, LogicalSize, Manager, WebviewWi
 
 use crate::easing::make_ease;
 
-/// Closed: one circle carrying the mark.
+/// Closed: one square tile carrying the mark.
 pub const ORB: f64 = 56.0;
 /// First open: a small card holding the selected project and the log field.
 pub const POPOVER_W: f64 = 320.0;
@@ -20,7 +20,7 @@ const POINTER_MS: u64 = 20;
 const HOVER_INTENT_MS: u64 = 80;
 const LEAVE_DELAY_MS: u64 = 450;
 /// Air between the panel and the left edge. The orb floats the same distance,
-/// so opening reads as the circle growing into the card.
+/// so opening reads as the tile growing into the card.
 const EDGE_GAP: f64 = 16.0;
 const MAX_HEIGHT: f64 = 580.0;
 const MIN_V_GAP: f64 = 24.0;
@@ -62,13 +62,6 @@ impl Mode {
         }
     }
 
-    /// Corner radius of this mode; the circle is half the orb.
-    pub fn radius(self) -> f64 {
-        match self {
-            Mode::Circle => ORB / 2.0,
-            _ => 20.0,
-        }
-    }
 }
 
 #[derive(Clone, Copy)]
@@ -86,7 +79,6 @@ struct Inner {
     height: f64,
     x: f64,
     y: f64,
-    radius: f64,
     mode: Mode,
     geometry: Geometry,
 }
@@ -116,7 +108,6 @@ impl Default for Panel {
                 height: ORB,
                 x: 0.0,
                 y: 0.0,
-                radius: ORB / 2.0,
                 mode: Mode::Circle,
                 geometry: Geometry {
                     x: 0.0,
@@ -175,7 +166,6 @@ pub fn adopt(app: &AppHandle, geometry: Geometry) {
     inner.height = height;
     inner.x = geometry.x;
     inner.y = y;
-    inner.radius = Mode::Circle.radius();
     inner.mode = Mode::Circle;
 }
 
@@ -187,53 +177,10 @@ pub fn set_reduced(app: &AppHandle, reduced: bool) {
     app.state::<Panel>().reduced.store(reduced, Ordering::SeqCst);
 }
 
-/// Acrylic covers the whole native rectangle, so the corners the CSS rounds
-/// away still showed a faint square. Clipping the window to the same shape
-/// removes it (and a square window shows through a circular orb), and makes
-/// the rounding real for the pointer as well.
-#[cfg(target_os = "windows")]
-fn clip_to_round(window: &WebviewWindow, width: f64, height: f64, radius: f64, scale: f64) {
-    use windows_sys::Win32::Graphics::Gdi::{CreateRoundRectRgn, SetWindowRgn};
-
-    let Ok(hwnd) = window.hwnd() else {
-        return;
-    };
-    let w = (width * scale).round() as i32;
-    let h = (height * scale).round() as i32;
-    // Never wider than half the short side: at 56x56 that is a circle.
-    let r = (radius.min(width / 2.0).min(height / 2.0) * scale).round() as i32;
-    // SAFETY: the region is created here and handed to the window, which owns
-    // it from that moment on.
-    unsafe {
-        let region = CreateRoundRectRgn(0, 0, w + 1, h + 1, r * 2, r * 2);
-        if !region.is_null() {
-            SetWindowRgn(hwnd.0, region, 1);
-        }
-    }
-}
-
-#[cfg(not(target_os = "windows"))]
-fn clip_to_round(_: &WebviewWindow, _: f64, _: f64, _: f64, _: f64) {}
-
-/// Size, place and clip in one go: the three always agree.
-fn apply(window: &WebviewWindow, width: f64, height: f64, x: f64, y: f64, radius: f64, scale: f64) {
+/// Size and place together: a window that resizes before it moves flickers.
+fn apply(window: &WebviewWindow, width: f64, height: f64, x: f64, y: f64) {
     let _ = window.set_size(LogicalSize::new(width, height));
     let _ = window.set_position(LogicalPosition::new(x, y));
-    clip_to_round(window, width, height, radius, scale);
-}
-
-pub fn clip_now(app: &AppHandle) {
-    if let Some(window) = app.get_webview_window("main") {
-        let state = app.state::<Panel>();
-        let inner = state.inner.lock().unwrap();
-        clip_to_round(
-            &window,
-            inner.width,
-            inner.height,
-            inner.radius,
-            inner.geometry.scale,
-        );
-    }
 }
 
 pub fn toggle(app: &AppHandle) {
@@ -268,23 +215,6 @@ pub fn set_by_user(app: &AppHandle, mode: Mode, instant: bool) {
     set_mode(app, mode, instant);
 }
 
-/// Windows paints the acrylic across the whole window rectangle, region or no
-/// region, so a 56px orb would sit on a dark square. Blur earns its keep on the
-/// cards and is invisible on a dot, so it is only on while something is open.
-#[cfg(target_os = "windows")]
-fn glass(window: &WebviewWindow, open: bool) {
-    if open {
-        if window_vibrancy::apply_acrylic(window, Some((7, 17, 31, 160))).is_err() {
-            let _ = window.eval("document.documentElement.classList.add('no-glass')");
-        }
-    } else {
-        let _ = window_vibrancy::clear_acrylic(window);
-    }
-}
-
-#[cfg(not(target_os = "windows"))]
-fn glass(_: &WebviewWindow, _: bool) {}
-
 pub fn set_mode(app: &AppHandle, mode: Mode, instant: bool) {
     let Some(window) = app.get_webview_window("main") else {
         return;
@@ -293,22 +223,24 @@ pub fn set_mode(app: &AppHandle, mode: Mode, instant: bool) {
     if mode.open() && !window.is_visible().unwrap_or(true) {
         let _ = window.show();
     }
-    if mode.open() {
-        glass(&window, true);
-    }
     let state = app.state::<Panel>();
 
     // Any new request invalidates the run in flight; the running frame notices
     // and stops, so the panel never fights itself.
     let generation = state.generation.fetch_add(1, Ordering::SeqCst) + 1;
 
-    let (from_w, from_h, from_y, from_r, to_w, to_h, to_y, to_r, x, scale) = {
+    let (from_w, from_h, from_y, to_w, to_h, to_y, x) = {
         let mut inner = state.inner.lock().unwrap();
         let (width, height, y) = mode.frame(&inner.geometry);
         inner.mode = mode;
         (
-            inner.width, inner.height, inner.y, inner.radius, width, height, y,
-            mode.radius(), inner.x, inner.geometry.scale,
+            inner.width,
+            inner.height,
+            inner.y,
+            width,
+            height,
+            y,
+            inner.x,
         )
     };
 
@@ -316,22 +248,18 @@ pub fn set_mode(app: &AppHandle, mode: Mode, instant: bool) {
     // same movement, not to a later round trip.
     let _ = app.emit("panel:state", mode.key());
 
-    let settle = |inner: &mut Inner, width: f64, height: f64, y: f64, radius: f64| {
+    let settle = |inner: &mut Inner, width: f64, height: f64, y: f64| {
         inner.width = width;
         inner.height = height;
         inner.y = y;
-        inner.radius = radius;
     };
 
     let still = (to_w - from_w).abs() < 0.5
         && (to_h - from_h).abs() < 0.5
         && (to_y - from_y).abs() < 0.5;
     if instant || still {
-        settle(&mut state.inner.lock().unwrap(), to_w, to_h, to_y, to_r);
-        apply(&window, to_w, to_h, x, to_y, to_r, scale);
-        if !mode.open() {
-            glass(&window, false);
-        }
+        settle(&mut state.inner.lock().unwrap(), to_w, to_h, to_y);
+        apply(&window, to_w, to_h, x, to_y);
         return;
     }
 
@@ -351,6 +279,7 @@ pub fn set_mode(app: &AppHandle, mode: Mode, instant: bool) {
 
             let state = app.state::<Panel>();
             if state.generation.load(Ordering::SeqCst) != generation {
+                eprintln!("[tween abort] gen={generation}");
                 return;
             }
 
@@ -359,26 +288,19 @@ pub fn set_mode(app: &AppHandle, mode: Mode, instant: bool) {
             let width = from_w + (to_w - from_w) * eased;
             let height = from_h + (to_h - from_h) * eased;
             let y = from_y + (to_y - from_y) * eased;
-            let radius = from_r + (to_r - from_r) * eased;
-            settle(&mut state.inner.lock().unwrap(), width, height, y, radius);
+            settle(&mut state.inner.lock().unwrap(), width, height, y);
 
             if let Some(window) = app.get_webview_window("main") {
-                apply(&window, width, height, x, y, radius, scale);
+                apply(&window, width, height, x, y);
             }
             if progress >= 1.0 {
                 break;
             }
         }
-
-        // The frost is dropped only once the card has finished shrinking back
-        // into the orb, so a collapse never goes dull mid-flight.
-        if !opening {
-            let state = app.state::<Panel>();
-            if state.generation.load(Ordering::SeqCst) == generation {
-                if let Some(window) = app.get_webview_window("main") {
-                    glass(&window, false);
-                }
-            }
+        // A resize can be coalesced away under the tween's frame rate; landing
+        // the final size once more keeps the webview's bounds in step with it.
+        if let Some(window) = app.get_webview_window("main") {
+            apply(&window, to_w, to_h, x, to_y);
         }
     });
 }
