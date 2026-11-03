@@ -4,7 +4,7 @@ mod store;
 
 use serde_json::Value;
 use std::path::PathBuf;
-use tauri::menu::{MenuBuilder, MenuItemBuilder};
+use tauri::menu::{CheckMenuItemBuilder, MenuBuilder, MenuItemBuilder};
 use tauri::tray::{MouseButton, MouseButtonState, TrayIconBuilder, TrayIconEvent};
 use tauri::{AppHandle, Manager};
 
@@ -69,15 +69,6 @@ fn data_save(doc: Value) -> Result<(), String> {
 }
 
 #[tauri::command]
-fn data_move(id: String, direction: String) -> Result<Value, String> {
-    let path = data_path();
-    let mut doc = store::load(&path);
-    store::move_project(&mut doc, &id, &direction)?;
-    store::save(&path, &doc)?;
-    Ok(doc)
-}
-
-#[tauri::command]
 fn panel_set_mode(app: AppHandle, mode: String, instant: bool) {
     panel::set_by_user(&app, panel::Mode::parse(&mode), instant);
 }
@@ -88,6 +79,12 @@ fn panel_set_hold(app: AppHandle, hold: bool) {
     panel::set_hold(&app, hold);
 }
 
+/// The card measured itself; Rust owns the window, so it does the resize.
+#[tauri::command]
+fn panel_set_card_height(app: AppHandle, height: f64) {
+    panel::set_card_height(&app, height);
+}
+
 #[tauri::command]
 fn panel_set_reduced(app: AppHandle, reduced: bool) {
     panel::set_reduced(&app, reduced);
@@ -95,8 +92,16 @@ fn panel_set_reduced(app: AppHandle, reduced: bool) {
 
 fn build_tray(app: &AppHandle) -> tauri::Result<()> {
     let toggle = MenuItemBuilder::with_id("toggle", "Show / hide TaskX").build(app)?;
+    use tauri_plugin_autostart::ManagerExt;
+    let login = CheckMenuItemBuilder::with_id("login", "Start at login")
+        .checked(app.autolaunch().is_enabled().unwrap_or(false))
+        .build(app)?;
     let quit = MenuItemBuilder::with_id("quit", "Quit").build(app)?;
-    let menu = MenuBuilder::new(app).items(&[&toggle, &quit]).build()?;
+    let menu = MenuBuilder::new(app)
+        .items(&[&toggle, &login])
+        .separator()
+        .item(&quit)
+        .build()?;
 
     TrayIconBuilder::with_id("taskx")
         .icon(tauri::image::Image::from_bytes(include_bytes!(
@@ -105,8 +110,17 @@ fn build_tray(app: &AppHandle) -> tauri::Result<()> {
         .tooltip("TaskX — Alt+X")
         .menu(&menu)
         .show_menu_on_left_click(false)
-        .on_menu_event(|app, event| match event.id().as_ref() {
+        .on_menu_event(move |app, event| match event.id().as_ref() {
             "toggle" => panel::toggle(app),
+            // The check item flips itself on click; follow it.
+            "login" => {
+                let on = login.is_checked().unwrap_or(false);
+                let _ = if on {
+                    app.autolaunch().enable()
+                } else {
+                    app.autolaunch().disable()
+                };
+            }
             "quit" => app.exit(0),
             _ => {}
         })
@@ -138,10 +152,10 @@ pub fn run() {
         .invoke_handler(tauri::generate_handler![
             data_load,
             data_save,
-            data_move,
             panel_set_mode,
             panel_set_hold,
-            panel_set_reduced
+            panel_set_reduced,
+            panel_set_card_height
         ])
         .setup(|app| {
             let window = app
@@ -149,7 +163,7 @@ pub fn run() {
                 .expect("the panel window is declared in tauri.conf.json");
 
             let geometry = panel::measure(&window);
-            let (width, height, x, y) = panel::Mode::Circle.frame(&geometry);
+            let (width, height, x, y) = panel::Mode::Circle.frame(&geometry, panel::POPOVER_H);
             window.set_size(tauri::LogicalSize::new(width, height))?;
             window.set_position(tauri::LogicalPosition::new(x, y))?;
             panel::adopt(app.handle(), geometry);
@@ -191,16 +205,17 @@ pub fn run() {
                 eprintln!("Alt+X is already registered by another app: {err}");
             }
 
-            build_tray(app.handle())?;
-            panel::start_pointer_watch(app.handle().clone());
-
-            // Only when built for real: a dev binary must not register itself to
-            // start at login.
+            // Only when built for real, and only on first run (no data file yet):
+            // after that the tray's "Start at login" is the user's to keep off.
+            // A dev binary must not register itself to start at login.
             #[cfg(not(debug_assertions))]
-            {
+            if !data_path().exists() {
                 use tauri_plugin_autostart::ManagerExt;
                 let _ = app.autolaunch().enable();
             }
+
+            build_tray(app.handle())?;
+            panel::start_pointer_watch(app.handle().clone());
 
             Ok(())
         })

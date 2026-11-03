@@ -1,7 +1,11 @@
-﻿/* Northstar, monochrome. Solid surfaces, hairline borders, no blur, no
+/* Northstar, monochrome. Solid surfaces, hairline borders, no blur, no
    gradients, no shadow: the panel has to look right on Windows 10 where none
    of the fancy composition effects exist. Dark is the only theme; the system
-   palette is declared so form controls and scrollbars stay in it. */
+   palette is declared so form controls and scrollbars stay in it.
+
+   Three things must read apart at a glance, each with its own mark:
+   important (blue star and bar), next (white, with a box to tick),
+   done (grey, with a tick). */
 
 :root {
   color-scheme: dark;
@@ -18,6 +22,9 @@
   --accent: #8ab4f8;
   --danger: #d97777;
   --scroll: rgba(255, 255, 255, 0.14);
+
+  /* The glyph column: star, done box and tick share it, so the words line up. */
+  --mark: 18px;
 }
 
 /* Nothing in this panel is round. One rule instead of a dozen declarations. */
@@ -40,8 +47,17 @@ body {
   font-size: 13px;
 }
 
+button {
+  font: inherit;
+  color: inherit;
+  background: transparent;
+  border: 0;
+  padding: 0;
+  cursor: pointer;
+}
+
 /* The window is exactly the panel, so this element is the whole surface: a
-   square tile when closed, a card when open. */
+   square tile when closed, a card or the dashboard when open. */
 .panel {
   position: relative;
   display: flex;
@@ -52,7 +68,7 @@ body {
   border: 1px solid var(--border);
 }
 
-/* â”€â”€ header â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€ */
+/* -- header ------------------------------------------------------------ */
 
 .bar {
   display: flex;
@@ -77,11 +93,7 @@ html[data-mode="panel"] .bar {
   align-items: center;
   gap: 9px;
   padding: 4px 4px 4px 0;
-  font: inherit;
   color: var(--text-2);
-  background: transparent;
-  border: 0;
-  cursor: pointer;
   transition: color 140ms ease;
 }
 
@@ -114,11 +126,7 @@ html[data-mode="panel"] .bar {
   place-items: center;
   width: 26px;
   height: 26px;
-  font: inherit;
   color: var(--text-2);
-  background: transparent;
-  border: 1px solid transparent;
-  cursor: pointer;
   transition:
     color 120ms ease,
     background-color 120ms ease;
@@ -144,7 +152,7 @@ html[data-mode="panel"] .bar {
   fill-opacity: 0.18;
 }
 
-/* â”€â”€ closed: one tile â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€ */
+/* -- closed: one tile -------------------------------------------------- */
 
 html[data-mode="circle"] .panel:hover {
   background: var(--hover);
@@ -178,14 +186,14 @@ html[data-mode="circle"] .panel-content {
   display: none;
 }
 
-/* â”€â”€ sections â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€ */
+/* -- content ----------------------------------------------------------- */
 
 .panel-content {
   display: flex;
   flex-direction: column;
   flex: 1;
   min-height: 0;
-  padding: 2px 8px 10px;
+  padding: 6px 8px 10px;
   opacity: 0;
   transform: translateX(-4px);
   pointer-events: none;
@@ -202,34 +210,26 @@ html[data-mode="panel"] .panel-content {
   transition-delay: 90ms;
 }
 
+.projects,
+.detail {
+  display: flex;
+  flex-direction: column;
+  min-height: 0;
+}
+
 .label {
   flex: none;
   margin: 0;
-  padding: 10px 4px 6px;
+  padding: 14px 4px 6px;
   font-size: 11px;
   font-weight: 600;
   letter-spacing: 0.08em;
   text-transform: uppercase;
-  color: var(--text-2);
+  color: var(--text-3);
 }
 
-.next-up {
-  display: flex;
-  flex-direction: column;
-  flex: 1;
-  min-height: 0;
-}
+/* -- the small card: the selected project and the log field ------------ */
 
-.last-session,
-.quick-add {
-  flex: none;
-  margin-top: 8px;
-  border-top: 1px solid var(--border);
-}
-
-/* â”€â”€ the small card â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€ */
-
-/* Reachable only from the popover: the way through to the full panel. */
 #expand {
   display: none;
 }
@@ -243,29 +243,57 @@ html[data-mode="popover"] #pin {
   display: none;
 }
 
-/* One project, its next step, the log field. Nothing else. */
-html[data-mode="popover"] .label,
-html[data-mode="popover"] .last-session {
+/* Every important project, plus whichever one the log field is for. */
+html[data-mode="popover"] #list .row:not(.is-star):not(.is-selected) {
   display: none;
 }
 
-html[data-mode="popover"] .next-up {
-  flex: 0 0 auto;
-}
-
+/* Sized to its rows, not to the window, so the card can measure itself. */
 html[data-mode="popover"] #list {
-  overflow: visible;
+  flex: 0 1 auto;
 }
 
-html[data-mode="popover"] #list .row:not(.is-selected) {
+html[data-mode="popover"] .detail > :not(#quick) {
   display: none;
 }
 
-html[data-mode="popover"] .quick-add {
+html[data-mode="popover"] .detail {
   margin-top: auto;
 }
 
-/* â”€â”€ project rows â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€ */
+/* -- the dashboard: every project left, the selected one right ---------- */
+
+html[data-mode="panel"] .panel-content {
+  display: grid;
+  grid-template-columns: 300px 1fr;
+}
+
+html[data-mode="panel"] .projects {
+  padding-right: 8px;
+  border-right: 1px solid var(--border);
+}
+
+html[data-mode="panel"] .detail {
+  padding: 0 4px 0 16px;
+}
+
+.detail-name {
+  flex: none;
+  margin: 0;
+  padding: 6px 4px 0;
+  font-size: 18px;
+  font-weight: 600;
+  letter-spacing: -0.01em;
+  overflow: hidden;
+  white-space: nowrap;
+  text-overflow: ellipsis;
+}
+
+.detail .next-line .next {
+  font-size: 14px;
+}
+
+/* -- project rows ------------------------------------------------------ */
 
 #list {
   flex: 1;
@@ -283,38 +311,86 @@ html[data-mode="popover"] .quick-add {
 .row {
   position: relative;
   display: grid;
-  gap: 3px;
-  padding: 7px 8px;
+  gap: 2px;
+  padding: 8px 8px 8px 6px;
+  border-left: 2px solid transparent;
   transition: background-color 120ms ease;
 }
 
 .row + .row {
-  margin-top: 1px;
+  margin-top: 2px;
+}
+
+/* Important projects carry the accent; everything else stays quiet. */
+.row.is-star {
+  border-left-color: var(--accent);
+}
+
+/* One hairline where the important ones end. */
+.row.is-star + .row:not(.is-star) {
+  margin-top: 11px;
+}
+
+.row.is-star + .row:not(.is-star)::before {
+  content: "";
+  position: absolute;
+  top: -6px;
+  left: -2px;
+  right: 0;
+  border-top: 1px solid var(--border);
 }
 
 .row:hover {
   background: var(--hover);
 }
 
+.row.is-selected,
 .row:focus-within {
   background: var(--elevated);
 }
 
-.row.is-selected {
-  background: var(--elevated);
-  box-shadow: inset 2px 0 0 var(--accent);
+.row-head,
+.next-line {
+  display: flex;
+  align-items: center;
+  gap: 6px;
 }
 
 .row-head {
-  display: flex;
-  align-items: center;
-  gap: 9px;
-  padding-right: 62px;
+  padding-right: 4px;
+}
+
+.star {
+  flex: none;
+  width: var(--mark);
+  height: var(--mark);
+  font-size: 13px;
+  line-height: 1;
+  color: var(--text-3);
+  transition: color 120ms ease;
+}
+
+.star:hover,
+.row.is-star .star {
+  color: var(--accent);
+}
+
+.age {
+  flex: none;
+  font-size: 11px;
+  font-variant-numeric: tabular-nums;
+  color: var(--text-3);
+}
+
+/* The row's tools take the age's place while you are on the row. */
+.row:hover .age,
+.row:focus-within .age {
+  visibility: hidden;
 }
 
 .actions {
   position: absolute;
-  top: 5px;
+  top: 6px;
   right: 4px;
   display: flex;
   opacity: 0;
@@ -333,12 +409,8 @@ html[data-mode="popover"] .quick-add {
   place-items: center;
   width: 22px;
   height: 22px;
-  font: inherit;
   font-size: 12px;
   color: var(--text-3);
-  background: transparent;
-  border: 0;
-  cursor: pointer;
   transition:
     color 120ms ease,
     background-color 120ms ease;
@@ -353,22 +425,55 @@ html[data-mode="popover"] .quick-add {
   color: var(--danger);
 }
 
-.badge {
+/* The box that turns the next step into a log entry. */
+.done {
   flex: none;
   display: grid;
   place-items: center;
-  width: 20px;
-  height: 20px;
-  font-size: 10.5px;
-  font-weight: 600;
-  color: var(--text-2);
-  background: var(--elevated);
-  border: 1px solid var(--border);
-  text-transform: uppercase;
-  user-select: none;
+  width: var(--mark);
+  height: var(--mark);
 }
 
-/* â”€â”€ inputs â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€ */
+.done::before {
+  content: "";
+  width: 11px;
+  height: 11px;
+  border: 1px solid var(--text-2);
+  transition:
+    border-color 120ms ease,
+    background-color 120ms ease;
+}
+
+.done:hover:not(:disabled)::before {
+  border-color: var(--accent);
+  background: rgba(138, 180, 248, 0.25);
+}
+
+.done:disabled {
+  cursor: default;
+  opacity: 0.3;
+}
+
+/* Line 3: the last thing done. Grey, ticked, one line. */
+.did {
+  display: flex;
+  gap: 6px;
+  margin: 0;
+  font-size: 12px;
+  color: var(--text-3);
+  overflow: hidden;
+  white-space: nowrap;
+  text-overflow: ellipsis;
+}
+
+.did::before {
+  content: "\2713";
+  flex: none;
+  width: var(--mark);
+  text-align: center;
+}
+
+/* -- inputs ------------------------------------------------------------ */
 
 input {
   width: 100%;
@@ -393,115 +498,87 @@ input:focus {
   box-shadow: inset 0 0 0 1px var(--accent);
 }
 
+input:disabled {
+  cursor: default;
+}
+
 .row .name {
   font-size: 14px;
   font-weight: 600;
   letter-spacing: -0.005em;
+  color: var(--text-2);
 }
 
-/* Indented to the name, so identity and task read as two ranks, not two peers. */
-.row .next {
-  margin-left: 29px;
-  width: calc(100% - 29px);
+.row.is-star .name,
+.row .name:focus {
+  color: var(--text);
+}
+
+.next {
   font-size: 13px;
   font-weight: 500;
-  color: var(--text-2);
-}
-
-/* â”€â”€ last session â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€ */
-
-.last-meta {
-  padding: 0 4px 4px;
-  font-size: 11px;
-  color: var(--text-2);
-}
-
-.last-what {
-  margin: 0;
-  padding: 0 4px;
-  font-size: 12px;
-  line-height: 1.55;
-  color: var(--text-2);
-  display: -webkit-box;
-  -webkit-line-clamp: 2;
-  -webkit-box-orient: vertical;
-  overflow: hidden;
-}
-
-.note {
-  margin: 0;
-  padding: 0 4px;
-  font-size: 12px;
-  line-height: 1.55;
-  color: var(--text-2);
-}
-
-.toggle {
-  margin: 4px 0 0;
-  padding: 3px 5px;
-  font: inherit;
-  font-size: 11px;
-  color: var(--text-2);
-  background: transparent;
-  border: 0;
-  cursor: pointer;
-  transition:
-    color 120ms ease,
-    background-color 120ms ease;
-}
-
-.toggle:hover {
   color: var(--text);
-  background: var(--hover);
 }
 
-.history {
-  margin: 6px 0 0;
+/* -- log --------------------------------------------------------------- */
+
+.log {
+  flex: 1;
+  min-height: 0;
+  margin: 0;
   padding: 0 4px;
-  max-height: 132px;
   overflow-y: auto;
   list-style: none;
 }
 
-.history li {
+.log li {
   display: flex;
   flex-direction: column;
   gap: 2px;
-  padding: 7px 0;
+  padding: 8px 0;
 }
 
-.history li + li {
+.log li + li {
   border-top: 1px solid var(--border);
 }
 
-.history .when {
+.log .when {
   font-size: 11px;
-  color: var(--text-2);
+  color: var(--text-3);
 }
 
-.history .what {
-  font-size: 12px;
+.log .what {
+  font-size: 13px;
   line-height: 1.5;
   color: var(--text-2);
 }
 
-.history .next {
+.log .what::before {
+  content: "\2713  ";
+  color: var(--text-3);
+}
+
+.log .then {
   font-size: 11px;
   line-height: 1.4;
   color: var(--text-3);
 }
 
-.history .next::before {
-  content: "â†’ ";
+.log .then::before {
+  content: "\2192  next: ";
 }
 
-.history[hidden] {
-  display: none;
+.log .note {
+  font-size: 12px;
+  line-height: 1.55;
+  color: var(--text-2);
 }
 
-/* â”€â”€ quick add â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€ */
+/* -- quick add --------------------------------------------------------- */
 
 #quick {
+  flex: none;
+  margin-top: 10px;
   padding: 9px 10px;
   font-size: 13px;
   background: var(--elevated);
@@ -514,11 +591,10 @@ input:focus {
 }
 
 #quick:disabled {
-  cursor: default;
   opacity: 0.5;
 }
 
-/* â”€â”€ empty state â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€ */
+/* -- empty state ------------------------------------------------------- */
 
 #empty {
   display: grid;
@@ -543,14 +619,12 @@ input:focus {
 }
 
 #add-empty {
-  font: inherit;
   font-size: 12px;
   font-weight: 500;
   padding: 7px 12px;
   color: var(--text);
   background: var(--elevated);
   border: 1px solid var(--border);
-  cursor: pointer;
   transition:
     color 120ms ease,
     border-color 120ms ease;
@@ -561,18 +635,14 @@ input:focus {
   border-color: var(--accent);
 }
 
-/* â”€â”€ focus â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€ */
+/* -- focus ------------------------------------------------------------- */
 
-.icon-btn:focus-visible,
-.logo:focus-visible,
-.toggle:focus-visible,
-.actions button:focus-visible,
-#add-empty:focus-visible {
+button:focus-visible {
   outline: 1px solid var(--accent);
   outline-offset: -1px;
 }
 
-/* â”€â”€ scrollbars â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€ */
+/* -- scrollbars -------------------------------------------------------- */
 
 ::-webkit-scrollbar {
   width: 10px;
@@ -594,4 +664,3 @@ input:focus {
     animation: none !important;
   }
 }
-

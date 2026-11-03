@@ -9,10 +9,12 @@ use crate::easing::make_ease;
 
 /// Closed: one square tile carrying the mark.
 pub const ORB: f64 = 56.0;
-/// First open: a small card holding the selected project and the log field.
+/// First open: a small card holding the starred projects and the log field.
+/// Its height follows its content, which the page measures and reports.
 pub const POPOVER_W: f64 = 320.0;
-pub const POPOVER_H: f64 = 190.0;
-pub const EXPANDED_W: f64 = 370.0;
+pub const POPOVER_H: f64 = 200.0;
+/// The dashboard: project list on the left, the selected project on the right.
+pub const EXPANDED_W: f64 = 720.0;
 const EXPAND_MS: u64 = 340;
 const COLLAPSE_MS: u64 = 280;
 const FRAME_MS: u64 = 16;
@@ -55,10 +57,19 @@ impl Mode {
 
     /// Width, height, left edge and top edge of this mode. Only the resting tile
     /// sits out past the screen edge; the cards open at the panel's inset.
-    pub fn frame(self, geometry: &Geometry) -> (f64, f64, f64, f64) {
+    pub fn frame(self, geometry: &Geometry, card_h: f64) -> (f64, f64, f64, f64) {
         match self {
             Mode::Circle => (ORB, ORB, geometry.orb_x, geometry.orb_y),
-            Mode::Popover => (POPOVER_W, POPOVER_H, geometry.x, geometry.popover_y),
+            Mode::Popover => {
+                // Opens around the orb's centre line, but never past the
+                // panel's own top and bottom margins.
+                let height = card_h.min(geometry.height);
+                let top = geometry.panel_y;
+                let y = (geometry.orb_y + ORB / 2.0 - height / 2.0)
+                    .round()
+                    .clamp(top, top + geometry.height - height);
+                (POPOVER_W, height, geometry.x, y)
+            }
             Mode::Panel => (EXPANDED_W, geometry.height, geometry.x, geometry.panel_y),
         }
     }
@@ -71,7 +82,6 @@ pub struct Geometry {
     pub orb_x: f64,
     pub panel_y: f64,
     pub orb_y: f64,
-    pub popover_y: f64,
     pub height: f64,
     pub scale: f64,
 }
@@ -83,6 +93,7 @@ struct Inner {
     y: f64,
     mode: Mode,
     geometry: Geometry,
+    card_h: f64,
 }
 
 /// The panel's single source of truth. Everything the pointer watcher needs is
@@ -116,10 +127,10 @@ impl Default for Panel {
                     orb_x: 0.0,
                     panel_y: 0.0,
                     orb_y: 0.0,
-                    popover_y: 0.0,
                     height: 580.0,
                     scale: 1.0,
                 },
+                card_h: POPOVER_H,
             }),
             generation: AtomicU64::new(0),
             hold: AtomicBool::new(false),
@@ -130,8 +141,7 @@ impl Default for Panel {
     }
 }
 
-/// Measured once at startup; afterwards the panel moves on its own and never
-/// re-queries the display.
+/// Where every mode sits on the current monitor's work area.
 pub fn measure(window: &WebviewWindow) -> Geometry {
     let scale = window.scale_factor().unwrap_or(1.0);
     let area = window.current_monitor().ok().flatten().map(|monitor| {
@@ -148,15 +158,12 @@ pub fn measure(window: &WebviewWindow) -> Geometry {
     // screen can hold with even margins above and below.
     let height = (ah - MIN_V_GAP * 2.0).min(MAX_HEIGHT).round();
     let orb_y = ay + ((ah - ORB) / 2.0).round();
-    // The popover shares the orb's centre line, so it opens around it.
-    let popover_y = (orb_y + ORB / 2.0 - POPOVER_H / 2.0).round();
     Geometry {
         x: ax + EDGE_GAP,
         // Half the tile hangs past the screen edge: present, but not in the way.
         orb_x: ax - ORB / 2.0,
         panel_y: ay + ((ah - height) / 2.0).round(),
         orb_y,
-        popover_y,
         height,
         scale,
     }
@@ -165,7 +172,7 @@ pub fn measure(window: &WebviewWindow) -> Geometry {
 pub fn adopt(app: &AppHandle, geometry: Geometry) {
     let state = app.state::<Panel>();
     let mut inner = state.inner.lock().unwrap();
-    let (width, height, x, y) = Mode::Circle.frame(&geometry);
+    let (width, height, x, y) = Mode::Circle.frame(&geometry, inner.card_h);
     inner.geometry = geometry;
     inner.width = width;
     inner.height = height;
@@ -180,6 +187,22 @@ pub fn set_hold(app: &AppHandle, hold: bool) {
 
 pub fn set_reduced(app: &AppHandle, reduced: bool) {
     app.state::<Panel>().reduced.store(reduced, Ordering::SeqCst);
+}
+
+/// The card's content changed height: if it is open, grow or shrink to fit.
+pub fn set_card_height(app: &AppHandle, height: f64) {
+    let state = app.state::<Panel>();
+    let refit = {
+        let mut inner = state.inner.lock().unwrap();
+        if (inner.card_h - height).abs() < 0.5 {
+            return;
+        }
+        inner.card_h = height;
+        inner.mode == Mode::Popover
+    };
+    if refit {
+        set_mode(app, Mode::Popover, state.reduced.load(Ordering::SeqCst));
+    }
 }
 
 /// Size and place together: a window that resizes before it moves flickers.
@@ -206,6 +229,14 @@ pub fn toggle(app: &AppHandle) {
         Mode::Circle
     };
     set_by_user(app, next, reduced);
+    // Summoned from the keyboard or tray: take focus so the log field is ready
+    // to type into. Hover never does this, it would steal from the app in use.
+    if next.open() {
+        if let Some(window) = app.get_webview_window("main") {
+            let _ = window.set_focus();
+        }
+        let _ = app.emit("panel:focus", ());
+    }
 }
 
 /// Closing on purpose: the pointer may still be sitting on the panel, and it
@@ -234,9 +265,15 @@ pub fn set_mode(app: &AppHandle, mode: Mode, instant: bool) {
     // and stops, so the panel never fights itself.
     let generation = state.generation.fetch_add(1, Ordering::SeqCst) + 1;
 
+    // ponytail: re-measured per move, so a resolution or taskbar change made
+    // while resting is only picked up on the next open or close. Measured
+    // before the lock: asking the window may wait on the main thread.
+    let geometry = measure(&window);
+
     let (from_w, from_h, from_x, from_y, to_w, to_h, to_x, to_y) = {
         let mut inner = state.inner.lock().unwrap();
-        let (width, height, x, y) = mode.frame(&inner.geometry);
+        inner.geometry = geometry;
+        let (width, height, x, y) = mode.frame(&inner.geometry, inner.card_h);
         inner.mode = mode;
         (
             inner.width,
