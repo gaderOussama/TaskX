@@ -1,7 +1,9 @@
-/* Northstar, monochrome. Solid surfaces, hairline borders, no blur, no
-   gradients, no shadow: the panel has to look right on Windows 10 where none
-   of the fancy composition effects exist. Dark is the only theme; the system
-   palette is declared so form controls and scrollbars stay in it.
+/* Northstar, monochrome. Hairline borders, no blur, no shadow: the panel has
+   to look right on Windows 10 where none of the fancy composition effects
+   exist. The only movement is the northern lights drawn on a canvas behind
+   everything (aurora.js); rows and fields sit on it as thin veils. Dark is
+   the only theme; the system palette is declared so form controls and
+   scrollbars stay in it.
 
    Three things must read apart at a glance, each with its own mark:
    important (blue star and bar), next (white, with a box to tick),
@@ -13,6 +15,10 @@
   --surface: #191919;
   --elevated: #222222;
   --hover: #292929;
+  /* Row states over the aurora: tints, so the sky still shows through. */
+  --veil: rgba(255, 255, 255, 0.05);
+  --veil-strong: rgba(255, 255, 255, 0.09);
+  --field: rgba(10, 10, 12, 0.72);
 
   --text: #ffffff;
   --text-2: #a0a0a0;
@@ -66,6 +72,31 @@ button {
   overflow: hidden;
   background: var(--surface);
   border: 1px solid var(--border);
+}
+
+/* The northern lights belong to the dashboard only, at the very back. Half
+   see-through over black: visible, but never brighter than the text on it. */
+#aurora {
+  position: absolute;
+  inset: 0;
+  width: 100%;
+  height: 100%;
+  display: none;
+  opacity: 0.28;
+  pointer-events: none;
+}
+
+html[data-mode="panel"] .panel {
+  background: #000;
+}
+
+html[data-mode="panel"] #aurora {
+  display: block;
+}
+
+.bar,
+.panel-content {
+  position: relative;
 }
 
 /* -- header ------------------------------------------------------------ */
@@ -139,7 +170,7 @@ html[data-mode="panel"] .bar {
 
 .icon-btn:hover {
   color: var(--text);
-  background: var(--hover);
+  background: var(--veil-strong);
 }
 
 /* Pinned is a state, not a second colour. */
@@ -225,7 +256,7 @@ html[data-mode="panel"] .panel-content {
   font-weight: 600;
   letter-spacing: 0.08em;
   text-transform: uppercase;
-  color: var(--text-3);
+  color: var(--text-2);
 }
 
 /* -- the small card: the selected project and the log field ------------ */
@@ -341,12 +372,12 @@ html[data-mode="panel"] .detail {
 }
 
 .row:hover {
-  background: var(--hover);
+  background: var(--veil);
 }
 
 .row.is-selected,
 .row:focus-within {
-  background: var(--elevated);
+  background: var(--veil-strong);
 }
 
 .row-head,
@@ -418,7 +449,7 @@ html[data-mode="panel"] .detail {
 
 .actions button:hover {
   color: var(--text);
-  background: var(--hover);
+  background: var(--veil-strong);
 }
 
 .actions button:last-child:hover {
@@ -460,7 +491,7 @@ html[data-mode="panel"] .detail {
   gap: 6px;
   margin: 0;
   font-size: 12px;
-  color: var(--text-3);
+  color: var(--text-2);
   overflow: hidden;
   white-space: nowrap;
   text-overflow: ellipsis;
@@ -544,7 +575,7 @@ input:disabled {
 
 .log .when {
   font-size: 11px;
-  color: var(--text-3);
+  color: var(--text-2);
 }
 
 .log .what {
@@ -555,13 +586,13 @@ input:disabled {
 
 .log .what::before {
   content: "\2713  ";
-  color: var(--text-3);
+  color: var(--text-2);
 }
 
 .log .then {
   font-size: 11px;
   line-height: 1.4;
-  color: var(--text-3);
+  color: var(--text-2);
 }
 
 .log .then::before {
@@ -581,7 +612,7 @@ input:disabled {
   margin-top: 10px;
   padding: 9px 10px;
   font-size: 13px;
-  background: var(--elevated);
+  background: var(--field);
   border: 1px solid var(--border);
 }
 
