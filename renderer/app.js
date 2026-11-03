@@ -1,21 +1,23 @@
 const invoke = window.__TAURI__.core.invoke;
 
-const panel = document.getElementById('panel');
 const list = document.getElementById('list');
 const empty = document.getElementById('empty');
 const pin = document.getElementById('pin');
-const last = document.getElementById('last');
+const log = document.getElementById('log');
 const quick = document.getElementById('quick');
+const detailName = document.getElementById('detail-name');
+const detailNext = document.getElementById('detail-next');
+const detailDone = document.getElementById('detail-done');
 
 let doc = { version: 2, projects: [] };
 let saveFailed = false;
 
 // The expand/collapse decision lives in Rust, next to the real cursor. This is
-// only the mirror the CSS reacts to.
-let expanded = false;
+// only the mirror the CSS reacts to: circle, popover or the full panel.
+let mode = document.documentElement.dataset.mode || 'circle';
 let pinned = localStorage.getItem('taskx:pinned') === '1';
 
-// The project Last session and Quick add speak about.
+// The project the card, the log and Quick add speak about.
 let selectedId = null;
 
 // Uncommitted text per project, so re-renders and switching projects cannot eat it.
@@ -34,32 +36,45 @@ function stamp(at) {
   });
 }
 
-function initial(name) {
-  const text = String(name ?? '').trim();
-  return text ? text[0] : '•';
+/** How long since this was touched, in the fewest characters that still read. */
+function age(at) {
+  const minutes = Math.floor((Date.now() - at) / 60000);
+  if (minutes < 1) return 'now';
+  if (minutes < 60) return `${minutes}m`;
+  const hours = Math.floor(minutes / 60);
+  if (hours < 24) return `${hours}h`;
+  const days = Math.floor(hours / 24);
+  return days < 14 ? `${days}d` : `${Math.floor(days / 7)}w`;
 }
 
 function labelOf(project) {
   return String(project?.name ?? '').trim() || 'this project';
 }
 
-// Same id always gets the same colour, so a project is recognisable before you read it.
-// Fixed hues rather than a free-running hash: neighbours must be told apart at a
-// glance, and a hash alone can land two ids on the same purple.
-const BADGE_HUES = [212, 268, 158, 30, 350, 190, 96, 300];
-function badgeColor(id) {
-  let n = 0;
-  for (const ch of String(id)) n = (n * 31 + ch.codePointAt(0)) % 9973;
-  return `hsl(${BADGE_HUES[n % BADGE_HUES.length]} 45% 42%)`;
-}
+const newest = (project) => (project.entries || []).at(-1);
 
 /* ── panel ─────────────────────────────────────────────────────────────── */
 
-function setExpanded(next) {
-  if (next === expanded) return;
-  invoke('panel_set_expanded', { expanded: next, instant: reduceMotion() }).catch((err) => {
-    console.error('panel_set_expanded failed', err);
+function setMode(next) {
+  if (next === mode) return;
+  mode = next;
+  document.documentElement.dataset.mode = next;
+  invoke('panel_set_mode', { mode: next, instant: reduceMotion() }).catch((err) => {
+    console.error('panel_set_mode failed', err);
   });
+  fitCard();
+}
+
+/** The card is as tall as its rows and the log field; Rust resizes the window to match. */
+function fitCard() {
+  if (mode !== 'popover') return;
+  const content = getComputedStyle(document.querySelector('.panel-content'));
+  const height = 2 // the panel's border
+    + document.querySelector('.bar').offsetHeight
+    + parseFloat(content.paddingTop) + parseFloat(content.paddingBottom)
+    + (list.hidden ? empty.offsetHeight : list.scrollHeight)
+    + parseFloat(getComputedStyle(quick).marginTop) + quick.offsetHeight;
+  invoke('panel_set_card_height', { height: Math.ceil(height) }).catch(() => {});
 }
 
 /** Never collapse under someone who is typing or holding an unsaved line. */
@@ -84,24 +99,35 @@ function syncPin() {
 function wirePanel() {
   syncPin();
 
-  // Focus moving in or out changes what counts as "busy".
+  // Focus moving in or out changes what counts as "busy". Leaving a field is
+  // also the moment a debounced save should land.
   document.addEventListener('focusin', () => syncHold());
-  document.addEventListener('focusout', () => setTimeout(syncHold, 0));
+  document.addEventListener('focusout', () => {
+    if (saveTimer) save();
+    setTimeout(syncHold, 0);
+  });
 
   pin.addEventListener('click', () => {
     pinned = !pinned;
     syncPin();
     syncHold();
-    if (pinned) setExpanded(true);
+    if (pinned) setMode('panel');
   });
 
-  document.getElementById('collapse').addEventListener('click', () => setExpanded(false));
-  document.getElementById('logo').addEventListener('click', () => setExpanded(!expanded));
+  document.getElementById('collapse').addEventListener('click', () => setMode('circle'));
+  document.getElementById('expand').addEventListener('click', () => setMode('panel'));
+  document.getElementById('logo').addEventListener('click', () => {
+    setMode(mode === 'circle' ? 'popover' : 'circle');
+  });
 }
 
 /* ── data ──────────────────────────────────────────────────────────────── */
 
-async function save() {
+// Saves run one after another, never two at once: they share one temp file.
+let saving = Promise.resolve(true);
+let saveTimer = null;
+
+async function write() {
   try {
     await invoke('data_save', { doc });
     saveFailed = false;
@@ -113,11 +139,28 @@ async function save() {
   }
 }
 
-function ordered() {
-  return doc.projects.slice().sort((a, b) => a.priority - b.priority);
+function save() {
+  clearTimeout(saveTimer);
+  saveTimer = null;
+  saving = saving.then(write);
+  return saving;
 }
 
-/** Falls back to the first project, so the lower half is never blank for no reason. */
+// ponytail: typing saves 300 ms after the last key; quitting from the tray
+// inside that window loses those keys. Flush on quit if it ever matters.
+function saveSoon() {
+  clearTimeout(saveTimer);
+  saveTimer = setTimeout(save, 300);
+}
+
+/** Important first, then the rest; your own order inside each group. */
+function ordered() {
+  return doc.projects
+    .slice()
+    .sort((a, b) => Number(Boolean(b.star)) - Number(Boolean(a.star)) || a.priority - b.priority);
+}
+
+/** Falls back to the first project, so the card is never blank for no reason. */
 function selected() {
   const all = ordered();
   return all.find((p) => p.id === selectedId) || all[0] || null;
@@ -127,12 +170,17 @@ function select(id) {
   if (id === selectedId) return;
   selectedId = id;
   for (const row of list.children) row.classList.toggle('is-selected', row.dataset.id === id);
-  renderLast();
+  renderDetail();
   renderQuick();
+  fitCard();
+}
+
+function rowOf(id) {
+  return Array.from(list.children).find((li) => li.dataset.id === id);
 }
 
 function focusAction(id, action) {
-  const row = Array.from(list.children).find((li) => li.dataset.id === id);
+  const row = rowOf(id);
   const button = row && row.querySelector(`[data-action="${action}"]`);
   (button || document.getElementById('add')).focus();
 }
@@ -147,14 +195,58 @@ function actionButton(label, ariaLabel, action, onClick) {
   return button;
 }
 
+/**
+ * Saves a structural change, or puts every project back the way it was.
+ * Changes must replace `entries` rather than push into it: the snapshot is shallow.
+ */
+async function commitOrRollback(change) {
+  const snapshot = doc.projects.map((p) => ({ ...p }));
+  change();
+  if (await save()) return true;
+  doc.projects = snapshot;
+  // The rows still hold the discarded objects; rebuild them on the restored ones.
+  render();
+  return false;
+}
+
+/** Moves stay inside their group: a starred project never sinks below a plain one. */
 async function moveProject(id, direction) {
-  try {
-    doc = await invoke('data_move', { id, direction });
-    render();
-    focusAction(id, direction);
-  } catch (err) {
-    alert('Could not move project: ' + err);
-  }
+  const all = ordered();
+  const from = all.findIndex((p) => p.id === id);
+  const to = direction === 'up' ? from - 1 : from + 1;
+  const a = all[from];
+  const b = all[to];
+  if (!a || !b || Boolean(a.star) !== Boolean(b.star)) return;
+
+  await commitOrRollback(() => {
+    [all[from], all[to]] = [b, a];
+    all.forEach((p, i) => { p.priority = i; });
+  });
+  render();
+  focusAction(id, direction);
+}
+
+async function toggleStar(project) {
+  await commitOrRollback(() => {
+    project.star = !project.star;
+    project.updatedAt = Date.now();
+  });
+  render();
+  focusAction(project.id, 'star');
+}
+
+/** The next step is done: it becomes the newest log entry and the field clears for the one after. */
+async function markDone(project) {
+  const text = String(project.next ?? '').trim();
+  if (!text) return;
+  await commitOrRollback(() => {
+    project.entries = [...(project.entries || []), { at: Date.now(), text }];
+    project.next = '';
+    project.updatedAt = Date.now();
+  });
+  render();
+  const field = mode === 'panel' ? detailNext : rowOf(project.id)?.querySelector('.next');
+  field?.focus();
 }
 
 async function deleteProject(project) {
@@ -162,20 +254,29 @@ async function deleteProject(project) {
   if (!blank && !confirm('Delete this project?')) return;
 
   const index = Array.from(list.children).findIndex((li) => li.dataset.id === project.id);
-  const snapshot = doc.projects.map((p) => [p, p.priority]);
-  doc.projects = doc.projects
-    .filter((p) => p.id !== project.id)
-    .sort((a, b) => a.priority - b.priority);
-  doc.projects.forEach((p, i) => { p.priority = i; });
-  drafts.delete(project.id);
-
-  if (!(await save())) {
-    doc.projects = snapshot.map(([p]) => p);
-    snapshot.forEach(([p, priority]) => { p.priority = priority; });
-  }
+  const ok = await commitOrRollback(() => {
+    doc.projects = ordered().filter((p) => p.id !== project.id);
+    doc.projects.forEach((p, i) => { p.priority = i; });
+  });
+  if (ok) drafts.delete(project.id);
   render();
   const nearest = list.children[Math.min(index, list.children.length - 1)];
   focusAction(nearest && nearest.dataset.id, 'delete');
+}
+
+/** The next step is shown in the row and in the dashboard; typing in one updates the other. */
+function setNext(project, value, source) {
+  project.next = value;
+  project.updatedAt = Date.now();
+  const row = rowOf(project.id);
+  const rowNext = row && row.querySelector('.next');
+  if (rowNext && rowNext !== source) rowNext.value = value;
+  if (row) row.querySelector('.done').disabled = value.trim() === '';
+  if (project === selected()) {
+    if (detailNext !== source) detailNext.value = value;
+    detailDone.disabled = value.trim() === '';
+  }
+  saveSoon();
 }
 
 /* ── rows ──────────────────────────────────────────────────────────────── */
@@ -185,42 +286,64 @@ function attachRow(project) {
   row.className = 'row';
   row.dataset.id = project.id;
   row.classList.toggle('is-selected', project.id === selectedId);
+  row.classList.toggle('is-star', Boolean(project.star));
 
+  // Line 1: importance, name, how long since the last entry.
   const head = document.createElement('div');
   head.className = 'row-head';
 
-  const badge = document.createElement('span');
-  badge.className = 'badge';
-  badge.setAttribute('aria-hidden', 'true');
-  badge.style.background = badgeColor(project.id);
-  badge.textContent = initial(project.name);
+  const star = document.createElement('button');
+  star.type = 'button';
+  star.className = 'star';
+  star.dataset.action = 'star';
+  star.textContent = project.star ? '★' : '☆';
+  star.setAttribute('aria-pressed', String(Boolean(project.star)));
+  star.setAttribute('aria-label', `Mark ${labelOf(project)} important`);
+  star.title = project.star ? 'Important' : 'Mark important';
+  star.addEventListener('click', () => toggleStar(project));
 
   const nameInput = document.createElement('input');
   nameInput.type = 'text';
   nameInput.className = 'name';
-  nameInput.dataset.field = 'name';
   nameInput.placeholder = 'project name';
   nameInput.value = String(project.name ?? '');
+  nameInput.setAttribute('aria-label', `Name of ${labelOf(project)}`);
   nameInput.addEventListener('input', () => {
     project.name = nameInput.value;
     project.updatedAt = Date.now();
-    badge.textContent = initial(nameInput.value);
-    save();
+    if (project === selected()) detailName.textContent = labelOf(project);
+    saveSoon();
   });
 
-  head.append(badge, nameInput);
+  const when = document.createElement('span');
+  when.className = 'age';
+  const last = newest(project);
+  when.textContent = last ? age(last.at) : '';
+  if (last) when.title = stamp(last.at);
+
+  head.append(star, nameInput, when);
+
+  // Line 2: what's next, with the box that marks it done.
+  const nextLine = document.createElement('div');
+  nextLine.className = 'next-line';
+
+  const done = document.createElement('button');
+  done.type = 'button';
+  done.className = 'done';
+  done.setAttribute('aria-label', `Mark next step for ${labelOf(project)} done`);
+  done.title = 'Done';
+  done.disabled = String(project.next ?? '').trim() === '';
+  done.addEventListener('click', () => markDone(project));
 
   const nextInput = document.createElement('input');
   nextInput.type = 'text';
   nextInput.className = 'next';
-  nextInput.dataset.field = 'next';
   nextInput.placeholder = "what's next…";
   nextInput.value = String(project.next ?? '');
-  nextInput.addEventListener('input', () => {
-    project.next = nextInput.value;
-    project.updatedAt = Date.now();
-    save();
-  });
+  nextInput.setAttribute('aria-label', `What's next for ${labelOf(project)}`);
+  nextInput.addEventListener('input', () => setNext(project, nextInput.value, nextInput));
+
+  nextLine.append(done, nextInput);
 
   const actions = document.createElement('div');
   actions.className = 'actions';
@@ -230,102 +353,77 @@ function attachRow(project) {
     actionButton('×', 'Delete project', 'delete', () => deleteProject(project)),
   );
 
-  row.append(head, nextInput, actions);
+  row.append(head, nextLine);
+
+  // Line 3: the last thing done, so where you left off is visible without opening anything.
+  if (last) {
+    const did = document.createElement('p');
+    did.className = 'did';
+    did.textContent = last.text;
+    did.title = `${stamp(last.at)} — ${last.text}`;
+    row.append(did);
+  }
+
+  row.append(actions);
   row.addEventListener('focusin', () => select(project.id));
   row.addEventListener('click', (event) => {
     if (event.target.closest('button')) return;
     select(project.id);
   });
 
-  nameInput.setAttribute('aria-label', `Name of ${labelOf(project)}`);
-  nextInput.setAttribute('aria-label', `What's next for ${labelOf(project)}`);
-
   return row;
 }
 
-/* ── last session ──────────────────────────────────────────────────────── */
+/* ── dashboard detail ──────────────────────────────────────────────────── */
 
 function emptyNote(text) {
-  const p = document.createElement('p');
-  p.className = 'note';
-  p.textContent = text;
-  return p;
+  const li = document.createElement('li');
+  li.className = 'note';
+  li.textContent = text;
+  return li;
 }
 
-function renderLast() {
+function renderDetail() {
   const project = selected();
-  last.textContent = '';
+  log.textContent = '';
+  detailName.textContent = project ? labelOf(project) : '';
+  detailNext.disabled = !project;
+  detailNext.value = project ? String(project.next ?? '') : '';
+  detailDone.disabled = !project || detailNext.value.trim() === '';
 
   if (!project) {
-    last.append(emptyNote('Add a project to start a log.'));
+    log.append(emptyNote('Add a project to start a log.'));
     return;
   }
 
   const entries = project.entries || [];
-  const newest = entries[entries.length - 1];
-  if (!newest) {
-    last.append(emptyNote(`Nothing logged on ${labelOf(project)} yet.`));
+  if (entries.length === 0) {
+    log.append(emptyNote(`Nothing logged on ${labelOf(project)} yet.`));
     return;
   }
 
-  const meta = document.createElement('div');
-  meta.className = 'last-meta';
-  meta.textContent = `${labelOf(project)} · ${stamp(newest.at)}`;
+  for (const entry of entries.slice().reverse()) {
+    const item = document.createElement('li');
 
-  const what = document.createElement('p');
-  what.className = 'last-what';
-  what.textContent = newest.text;
+    const when = document.createElement('span');
+    when.className = 'when';
+    when.textContent = stamp(entry.at);
 
-  last.append(meta, what);
+    const text = document.createElement('span');
+    text.className = 'what';
+    text.textContent = entry.text;
 
-  const older = entries.length - 1;
-  if (older < 1) return;
+    item.append(when, text);
 
-  const toggle = document.createElement('button');
-  toggle.type = 'button';
-  toggle.className = 'toggle';
-  toggle.textContent = `${older} earlier ▾`;
-  toggle.setAttribute('aria-expanded', 'false');
-  toggle.setAttribute('aria-label', `Show ${older} earlier entries for ${labelOf(project)}`);
-
-  const history = document.createElement('ol');
-  history.className = 'history';
-  history.hidden = true;
-
-  const fill = () => {
-    history.textContent = '';
-    for (const entry of entries.slice(0, -1).reverse()) {
-      const item = document.createElement('li');
-
-      const when = document.createElement('span');
-      when.className = 'when';
-      when.textContent = stamp(entry.at);
-
-      const text = document.createElement('span');
-      text.className = 'what';
-      text.textContent = entry.text;
-
-      item.append(when, text);
-
-      // Entries logged before this field existed simply have no next step.
-      if (entry.next) {
-        const after = document.createElement('span');
-        after.className = 'next';
-        after.textContent = entry.next;
-        item.append(after);
-      }
-      history.append(item);
+    // What the next step was when this was logged; older entries have none.
+    if (entry.next) {
+      const after = document.createElement('span');
+      after.className = 'then';
+      after.textContent = entry.next;
+      item.append(after);
     }
-  };
-
-  toggle.addEventListener('click', () => {
-    history.hidden = !history.hidden;
-    toggle.setAttribute('aria-expanded', String(!history.hidden));
-    toggle.textContent = history.hidden ? `${older} earlier ▾` : `${older} earlier ▴`;
-    if (!history.hidden) fill();
-  });
-
-  last.append(toggle, history);
+    log.append(item);
+  }
 }
 
 /* ── quick add ─────────────────────────────────────────────────────────── */
@@ -345,23 +443,21 @@ async function commit() {
   const text = quick.value.trim();
   if (!project || text === '') return;
 
-  const entries = project.entries || (project.entries = []);
-  const newest = entries[entries.length - 1];
-  if (newest && newest.text === text) {
-    quick.value = '';
-    drafts.delete(project.id);
-    return;
+  if (newest(project)?.text !== text) {
+    // Keep the next step as it stood at this moment: history stays a narrative,
+    // not just a list of things that happened.
+    const ok = await commitOrRollback(() => {
+      project.entries = [...(project.entries || []), {
+        at: Date.now(), text, next: String(project.next ?? '').trim(),
+      }];
+      project.updatedAt = Date.now();
+    });
+    if (!ok) return;
   }
-
-  const snapshot = entries.slice();
-  // Keep the next step as it stood at this moment: history stays a narrative,
-  // not just a list of things that happened.
-  entries.push({ at: Date.now(), text, next: String(project.next ?? '').trim() });
-  project.updatedAt = Date.now();
   quick.value = '';
   drafts.delete(project.id);
-  if (!(await save())) project.entries = snapshot;
-  renderLast();
+  render();
+  quick.focus();
   syncHold();
 }
 
@@ -377,20 +473,30 @@ function wireQuick() {
   // Committed only on Enter: a half-typed line is never logged.
   quick.addEventListener('keydown', (event) => {
     if (event.key === 'Escape') {
-      // Escape here is for the draft, not for closing the panel.
-      event.stopPropagation();
-      if (quick.value === '') quick.blur();
-      else {
-        quick.value = '';
-        const project = selected();
-        if (project) drafts.delete(project.id);
-        syncHold();
+      // The first Escape drops the draft; with nothing left it closes the card.
+      if (quick.value === '') {
+        quick.blur();
+        return;
       }
+      event.stopPropagation();
+      quick.value = '';
+      const project = selected();
+      if (project) drafts.delete(project.id);
+      syncHold();
       return;
     }
     if (event.key !== 'Enter') return;
     event.preventDefault();
     commit();
+  });
+
+  detailNext.addEventListener('input', () => {
+    const project = selected();
+    if (project) setNext(project, detailNext.value, detailNext);
+  });
+  detailDone.addEventListener('click', () => {
+    const project = selected();
+    if (project) markDone(project);
   });
 }
 
@@ -409,8 +515,9 @@ function render() {
   empty.hidden = !none;
   list.hidden = none;
 
-  renderLast();
+  renderDetail();
   renderQuick();
+  fitCard();
 }
 
 async function addProject() {
@@ -422,32 +529,29 @@ async function addProject() {
     next: '',
     updatedAt: Date.now(),
   };
-  const snapshot = doc.projects.slice();
-  doc.projects.push(project);
-  if (!(await save())) {
-    doc.projects = snapshot;
-    return;
-  }
+  if (!(await commitOrRollback(() => doc.projects.push(project)))) return;
   selectedId = project.id;
   render();
-  const row = Array.from(list.children).find((li) => li.dataset.id === project.id);
-  if (row) row.querySelector('input').focus();
+  rowOf(project.id)?.querySelector('.name').focus();
 }
 
 async function init() {
   wirePanel();
   wireQuick();
 
-  // The panel decides when it expands; this only mirrors the decision into CSS.
+  // The panel decides when it opens; this only mirrors the decision into CSS.
   await window.__TAURI__.event.listen('panel:state', (event) => {
-    expanded = Boolean(event.payload);
-    panel.classList.toggle('is-expanded', expanded);
+    mode = String(event.payload);
+    document.documentElement.dataset.mode = mode;
+    fitCard();
   });
+  // Summoned by Alt+X or the tray: ready to type the log line straight away.
+  await window.__TAURI__.event.listen('panel:focus', () => quick.focus());
 
   await invoke('panel_set_reduced', { reduced: reduceMotion() });
   syncHold();
   // A pinned panel comes back open, because that is what pinning asked for.
-  if (pinned) invoke('panel_set_expanded', { expanded: true, instant: true }).catch(() => {});
+  if (pinned) invoke('panel_set_mode', { mode: 'panel', instant: true }).catch(() => {});
 
   try {
     doc = await invoke('data_load');
@@ -457,18 +561,27 @@ async function init() {
   }
   render();
 
-  document.getElementById('add').addEventListener('click', () => { setExpanded(true); addProject(); });
+  // Ages ("2h") drift while the panel sits open; a minute is fine-grained enough.
+  setInterval(() => {
+    for (const row of list.children) {
+      const project = doc.projects.find((p) => p.id === row.dataset.id);
+      const last = project && newest(project);
+      if (last) row.querySelector('.age').textContent = age(last.at);
+    }
+  }, 60000);
+
+  document.getElementById('add').addEventListener('click', () => { setMode('panel'); addProject(); });
   document.getElementById('add-empty').addEventListener('click', addProject);
 
   document.addEventListener('keydown', (event) => {
     if (event.key === 'Escape') {
-      setExpanded(false);
+      setMode('circle');
       return;
     }
     if (!event.ctrlKey || event.altKey || event.shiftKey) return;
     if (event.key.toLowerCase() !== 'n') return;
     event.preventDefault();
-    setExpanded(true);
+    setMode('panel');
     addProject();
   });
 }

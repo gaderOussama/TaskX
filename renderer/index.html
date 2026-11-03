@@ -1,5 +1,5 @@
 <!doctype html>
-<html lang="en">
+<html lang="en" data-mode="circle">
   <head>
     <meta charset="utf-8" />
     <meta name="color-scheme" content="dark" />
@@ -8,6 +8,7 @@
   </head>
   <body>
     <div class="panel" id="panel">
+      <canvas id="aurora" aria-hidden="true"></canvas>
       <header class="bar">
         <button class="logo" id="logo" type="button" aria-label="Toggle TaskX" title="Toggle">
           <svg class="mark" viewBox="0 0 24 24" aria-hidden="true">
@@ -17,7 +18,7 @@
           <span class="appname">TaskX</span>
         </button>
         <div class="tools">
-          <button class="icon-btn" id="add" type="button" aria-label="Add project" title="Add project">
+          <button class="icon-btn" id="add" type="button" aria-label="Add project" title="Add project (Ctrl+N)">
             <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" aria-hidden="true">
               <path d="M12 5.5v13M5.5 12h13" />
             </svg>
@@ -28,7 +29,13 @@
               <path d="M12 12.2V20" />
             </svg>
           </button>
-          <button class="icon-btn" id="collapse" type="button" aria-label="Collapse" title="Collapse">
+          <button class="icon-btn" id="expand" type="button" aria-label="Open the dashboard" title="Open the dashboard">
+            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
+              <path d="M14.5 9.5L19 5M19 5h-4M19 5v4" />
+              <path d="M9.5 14.5L5 19M5 19h4M5 19v-4" />
+            </svg>
+          </button>
+          <button class="icon-btn" id="collapse" type="button" aria-label="Collapse" title="Collapse (Esc)">
             <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
               <path d="M14.5 6.5L9 12l5.5 5.5" />
             </svg>
@@ -37,8 +44,7 @@
       </header>
 
       <div class="panel-content">
-        <section class="next-up">
-          <h2 class="label">Next up</h2>
+        <section class="projects" aria-label="Projects">
           <ul id="list"></ul>
           <div id="empty" hidden>
             <p>No projects yet. Add one and keep your next step in sight.</p>
@@ -46,25 +52,23 @@
           </div>
         </section>
 
-        <section class="last-session">
-          <h2 class="label">Last session</h2>
-          <div id="last"></div>
-        </section>
+        <section class="detail" aria-label="Selected project">
+          <h2 class="detail-name" id="detail-name"></h2>
 
-        <section class="quick-add">
-          <h2 class="label">Quick add</h2>
-          <input
-            id="quick"
-            type="text"
-            autocomplete="off"
-            spellcheck="false"
-            placeholder="What did you do?"
-          />
+          <h3 class="label">Next</h3>
+          <div class="next-line">
+            <button class="done" id="detail-done" type="button" aria-label="Mark next step done" title="Done"></button>
+            <input id="detail-next" class="next" type="text" autocomplete="off" placeholder="what's next…" />
+          </div>
+
+          <h3 class="label">Log</h3>
+          <ol class="log" id="log"></ol>
+
+          <input id="quick" type="text" autocomplete="off" spellcheck="false" placeholder="What did you do?" />
         </section>
       </div>
-
-      <span class="edge" aria-hidden="true"></span>
     </div>
+    <script src="aurora.js"></script>
     <script src="app.js"></script>
   </body>
 </html>

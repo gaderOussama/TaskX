@@ -1,29 +1,42 @@
+/* Northstar, monochrome. Hairline borders, no blur, no shadow: the panel has
+   to look right on Windows 10 where none of the fancy composition effects
+   exist. The only movement is the northern lights drawn on a canvas behind
+   everything (aurora.js); rows and fields sit on it as thin veils. Dark is
+   the only theme; the system palette is declared so form controls and
+   scrollbars stay in it.
+
+   Three things must read apart at a glance, each with its own mark:
+   important (blue star and bar), next (white, with a box to tick),
+   done (grey, with a tick). */
+
 :root {
-  --text: #eef4fb;
-  --text-2: #b3c3d6;
-  --text-3: #93aac4;
-  --accent: #6fb4f2;
-  --accent-hover: #93c9fa;
-  --line: rgba(150, 185, 225, 0.09);
+  color-scheme: dark;
 
-  /* The acrylic underneath carries the frost and the navy tint; this is only
-     the extra weight that keeps small text readable over a bright desktop. */
-  --surface: rgba(7, 17, 31, 0.38);
-  --surface-strong: rgba(7, 17, 31, 0.62);
-  --border: rgba(150, 190, 235, 0.14);
-  --border-strong: rgba(150, 190, 235, 0.19);
-  --raise: rgba(150, 190, 235, 0.05);
-  --raise-strong: rgba(150, 190, 235, 0.08);
+  --surface: #191919;
+  --elevated: #222222;
+  --hover: #292929;
+  /* Row states over the aurora: tints, so the sky still shows through. */
+  --veil: rgba(255, 255, 255, 0.05);
+  --veil-strong: rgba(255, 255, 255, 0.09);
+  --field: rgba(10, 10, 12, 0.72);
+
+  --text: #ffffff;
+  --text-2: #a0a0a0;
+  --text-3: #666666;
+
+  --border: rgba(255, 255, 255, 0.09);
+  --accent: #8ab4f8;
+  --danger: #d97777;
+  --scroll: rgba(255, 255, 255, 0.14);
+
+  /* The glyph column: star, done box and tick share it, so the words line up. */
+  --mark: 18px;
 }
 
-/* No backdrop blur available: the surface has to carry the contrast alone. */
-:root.no-glass {
-  --surface: rgba(10, 20, 34, 0.96);
-  --surface-strong: rgba(10, 20, 34, 0.98);
-}
-
+/* Nothing in this panel is round. One rule instead of a dozen declarations. */
 * {
   box-sizing: border-box;
+  border-radius: 0;
 }
 
 html,
@@ -31,82 +44,77 @@ body {
   height: 100%;
   margin: 0;
   overflow: hidden;
-  /* No background here: everything outside the panel is the desktop, through
-     the acrylic layer. */
   background: transparent;
 }
 
 body {
   color: var(--text);
-  font-family: "Segoe UI Variable Text", "Segoe UI", system-ui, sans-serif;
-  font-size: 14px;
-  -webkit-font-smoothing: antialiased;
+  font-family: Inter, "Segoe UI Variable Text", "Segoe UI", system-ui, sans-serif;
+  font-size: 13px;
 }
 
-/* The window is exactly the panel, so this element is the whole surface. */
+button {
+  font: inherit;
+  color: inherit;
+  background: transparent;
+  border: 0;
+  padding: 0;
+  cursor: pointer;
+}
+
+/* The window is exactly the panel, so this element is the whole surface: a
+   square tile when closed, a card or the dashboard when open. */
 .panel {
   position: relative;
   display: flex;
   flex-direction: column;
   height: 100%;
   overflow: hidden;
-  background-color: var(--surface);
+  background: var(--surface);
   border: 1px solid var(--border);
-  /* Flush strip against the screen edge: only the side that faces the desktop rounds. */
-  border-radius: 0 9px 9px 0;
-  box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.05);
-  transition:
-    background-color 320ms ease,
-    border-color 320ms ease,
-    border-radius 280ms cubic-bezier(0.22, 1, 0.36, 1);
 }
 
-.panel.is-expanded {
-  background-color: var(--surface-strong);
-  border-color: var(--border-strong);
-  border-radius: 20px;
-  box-shadow:
-    inset 0 1px 0 rgba(255, 255, 255, 0.07),
-    inset 0 -1px 0 rgba(0, 0, 0, 0.35);
-}
-
-/* The only thing visible while collapsed: one faint lit edge. */
-.edge {
+/* The northern lights belong to the dashboard only, at the very back. Half
+   see-through over black: visible, but never brighter than the text on it. */
+#aurora {
   position: absolute;
-  top: 16%;
-  bottom: 16%;
-  right: 0;
-  width: 2px;
-  border-radius: 2px;
-  background: linear-gradient(
-    180deg,
-    transparent,
-    rgba(114, 183, 245, 0.34),
-    rgba(114, 183, 245, 0.14),
-    transparent
-  );
-  opacity: 1;
-  transition: opacity 240ms ease;
+  inset: 0;
+  width: 100%;
+  height: 100%;
+  display: none;
+  opacity: 0.28;
+  pointer-events: none;
 }
 
-.panel.is-expanded .edge {
-  opacity: 0;
+html[data-mode="panel"] .panel {
+  background: #000;
 }
 
-/* ── header ────────────────────────────────────────────────────────────── */
+html[data-mode="panel"] #aurora {
+  display: block;
+}
+
+.bar,
+.panel-content {
+  position: relative;
+}
+
+/* -- header ------------------------------------------------------------ */
 
 .bar {
   display: flex;
   align-items: center;
-  gap: 6px;
+  gap: 4px;
   flex: none;
   height: 44px;
-  padding: 0 10px 0 14px;
+  padding: 0 8px 0 12px;
+  border-bottom: 1px solid var(--border);
   opacity: 0;
   transition: opacity 150ms ease;
 }
 
-.panel.is-expanded .bar {
+html[data-mode="popover"] .bar,
+html[data-mode="panel"] .bar {
   opacity: 1;
   transition-delay: 60ms;
 }
@@ -114,14 +122,9 @@ body {
 .logo {
   display: flex;
   align-items: center;
-  gap: 8px;
-  padding: 4px 6px 4px 0;
-  font: inherit;
+  gap: 9px;
+  padding: 4px 4px 4px 0;
   color: var(--text-2);
-  background: transparent;
-  border: 0;
-  border-radius: 8px;
-  cursor: pointer;
   transition: color 140ms ease;
 }
 
@@ -130,109 +133,198 @@ body {
 }
 
 .mark {
+  flex: none;
   width: 15px;
   height: 15px;
-  flex: none;
 }
 
 .appname {
   font-size: 13px;
   font-weight: 600;
   color: var(--text);
-  letter-spacing: 0.005em;
+  letter-spacing: 0.01em;
 }
 
 .tools {
   display: flex;
   align-items: center;
-  gap: 1px;
+  gap: 2px;
   margin-left: auto;
 }
 
 .icon-btn {
   display: grid;
   place-items: center;
-  width: 27px;
-  height: 27px;
-  font: inherit;
-  color: var(--text-3);
-  background: transparent;
-  border: 1px solid transparent;
-  border-radius: 8px;
-  cursor: pointer;
-  transition: color 140ms ease, background-color 140ms ease;
+  width: 26px;
+  height: 26px;
+  color: var(--text-2);
+  transition:
+    color 120ms ease,
+    background-color 120ms ease;
 }
 
 .icon-btn svg {
-  width: 15px;
-  height: 15px;
+  width: 14px;
+  height: 14px;
 }
 
 .icon-btn:hover {
   color: var(--text);
-  background: var(--raise-strong);
+  background: var(--veil-strong);
 }
 
-/* Pinned reads as a filled pin, not a second colour. */
+/* Pinned is a state, not a second colour. */
 #pin[aria-pressed="true"] {
   color: var(--accent);
 }
 
 #pin[aria-pressed="true"] svg path:first-child {
   fill: currentColor;
-  fill-opacity: 0.22;
+  fill-opacity: 0.18;
 }
 
-/* ── sections ──────────────────────────────────────────────────────────── */
+/* -- closed: one tile -------------------------------------------------- */
+
+html[data-mode="circle"] .panel:hover {
+  background: var(--hover);
+}
+
+html[data-mode="circle"] .bar {
+  height: 100%;
+  padding: 0;
+  justify-content: center;
+  border-bottom: 0;
+  opacity: 1;
+  transition: none;
+}
+
+html[data-mode="circle"] .logo {
+  width: 100%;
+  height: 100%;
+  justify-content: center;
+  padding: 0;
+  color: var(--text);
+}
+
+html[data-mode="circle"] .mark {
+  width: 20px;
+  height: 20px;
+}
+
+html[data-mode="circle"] .appname,
+html[data-mode="circle"] .tools,
+html[data-mode="circle"] .panel-content {
+  display: none;
+}
+
+/* -- content ----------------------------------------------------------- */
 
 .panel-content {
   display: flex;
   flex-direction: column;
   flex: 1;
   min-height: 0;
-  padding: 1px 10px 12px;
+  padding: 6px 8px 10px;
   opacity: 0;
-  transform: translateX(-6px);
+  transform: translateX(-4px);
   pointer-events: none;
   transition:
     opacity 180ms ease,
     transform 240ms cubic-bezier(0.22, 1, 0.36, 1);
 }
 
-.panel.is-expanded .panel-content {
+html[data-mode="popover"] .panel-content,
+html[data-mode="panel"] .panel-content {
   opacity: 1;
   transform: translateX(0);
   pointer-events: auto;
   transition-delay: 90ms;
 }
 
-.label {
-  flex: none;
-  margin: 0;
-  padding: 0 8px 9px;
-  font-size: 10.5px;
-  font-weight: 600;
-  letter-spacing: 0.14em;
-  text-transform: uppercase;
-  color: var(--text-3);
-}
-
-.next-up {
+.projects,
+.detail {
   display: flex;
   flex-direction: column;
-  flex: 1;
   min-height: 0;
 }
 
-.last-session,
-.quick-add {
+.label {
   flex: none;
-  margin-top: 14px;
-  padding-top: 12px;
-  border-top: 1px solid var(--line);
+  margin: 0;
+  padding: 14px 4px 6px;
+  font-size: 11px;
+  font-weight: 600;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+  color: var(--text-2);
 }
 
-/* ── project rows ──────────────────────────────────────────────────────── */
+/* -- the small card: the selected project and the log field ------------ */
+
+#expand {
+  display: none;
+}
+
+html[data-mode="popover"] #expand {
+  display: grid;
+}
+
+html[data-mode="popover"] #add,
+html[data-mode="popover"] #pin {
+  display: none;
+}
+
+/* Every important project, plus whichever one the log field is for. */
+html[data-mode="popover"] #list .row:not(.is-star):not(.is-selected) {
+  display: none;
+}
+
+/* Sized to its rows, not to the window, so the card can measure itself. */
+html[data-mode="popover"] #list {
+  flex: 0 1 auto;
+}
+
+html[data-mode="popover"] .detail > :not(#quick) {
+  display: none;
+}
+
+html[data-mode="popover"] .detail {
+  margin-top: auto;
+}
+
+/* -- the dashboard: every project left, the selected one right ---------- */
+
+html[data-mode="panel"] .panel-content {
+  display: grid;
+  grid-template-columns: 300px 1fr;
+}
+
+html[data-mode="panel"] .projects {
+  padding-right: 8px;
+  border-right: 1px solid var(--border);
+}
+
+html[data-mode="panel"] .detail {
+  padding: 0 4px 0 16px;
+}
+
+.detail-name {
+  flex: none;
+  margin: 0;
+  padding: 6px 4px 0;
+  font-size: 18px;
+  font-weight: 600;
+  letter-spacing: -0.01em;
+  overflow: hidden;
+  white-space: nowrap;
+  text-overflow: ellipsis;
+}
+
+.detail .next-line .next {
+  font-size: 14px;
+}
+
+/* -- project rows ------------------------------------------------------ */
 
 #list {
   flex: 1;
@@ -251,44 +343,90 @@ body {
   position: relative;
   display: grid;
   gap: 2px;
-  padding: 8px 10px;
-  border-radius: 10px;
-  transition: background-color 140ms ease, box-shadow 140ms ease;
+  padding: 8px 8px 8px 6px;
+  border-left: 2px solid transparent;
+  transition: background-color 120ms ease;
 }
 
 .row + .row {
   margin-top: 2px;
 }
 
+/* Important projects carry the accent; everything else stays quiet. */
+.row.is-star {
+  border-left-color: var(--accent);
+}
+
+/* One hairline where the important ones end. */
+.row.is-star + .row:not(.is-star) {
+  margin-top: 11px;
+}
+
+.row.is-star + .row:not(.is-star)::before {
+  content: "";
+  position: absolute;
+  top: -6px;
+  left: -2px;
+  right: 0;
+  border-top: 1px solid var(--border);
+}
+
 .row:hover {
-  background: var(--raise);
+  background: var(--veil);
 }
 
+.row.is-selected,
 .row:focus-within {
-  background: var(--raise-strong);
+  background: var(--veil-strong);
 }
 
-.row.is-selected {
-  background: rgba(111, 180, 242, 0.075);
-  box-shadow: inset 2px 0 0 rgba(111, 180, 242, 0.4);
+.row-head,
+.next-line {
+  display: flex;
+  align-items: center;
+  gap: 6px;
 }
 
 .row-head {
-  display: flex;
-  align-items: center;
-  gap: 9px;
-  padding-right: 68px;
+  padding-right: 4px;
+}
+
+.star {
+  flex: none;
+  width: var(--mark);
+  height: var(--mark);
+  font-size: 13px;
+  line-height: 1;
+  color: var(--text-3);
+  transition: color 120ms ease;
+}
+
+.star:hover,
+.row.is-star .star {
+  color: var(--accent);
+}
+
+.age {
+  flex: none;
+  font-size: 11px;
+  font-variant-numeric: tabular-nums;
+  color: var(--text-3);
+}
+
+/* The row's tools take the age's place while you are on the row. */
+.row:hover .age,
+.row:focus-within .age {
+  visibility: hidden;
 }
 
 .actions {
   position: absolute;
   top: 6px;
-  right: 6px;
+  right: 4px;
   display: flex;
-  gap: 1px;
   opacity: 0;
   pointer-events: none;
-  transition: opacity 140ms ease;
+  transition: opacity 120ms ease;
 }
 
 .row:hover .actions,
@@ -302,228 +440,209 @@ body {
   place-items: center;
   width: 22px;
   height: 22px;
-  font: inherit;
   font-size: 12px;
   color: var(--text-3);
-  background: transparent;
-  border: 1px solid transparent;
-  border-radius: 6px;
-  cursor: pointer;
-  transition: color 140ms ease, background-color 140ms ease;
+  transition:
+    color 120ms ease,
+    background-color 120ms ease;
 }
 
 .actions button:hover {
   color: var(--text);
-  background: rgba(30, 50, 74, 0.75);
+  background: var(--veil-strong);
 }
 
 .actions button:last-child:hover {
-  color: #f07878;
+  color: var(--danger);
 }
 
-.badge {
+/* The box that turns the next step into a log entry. */
+.done {
   flex: none;
   display: grid;
   place-items: center;
-  width: 22px;
-  height: 22px;
-  border-radius: 50%;
-  font-size: 11px;
-  font-weight: 600;
-  color: #fff;
-  text-transform: uppercase;
-  user-select: none;
-  box-shadow: inset 0 0 0 1px rgba(255, 255, 255, 0.16);
+  width: var(--mark);
+  height: var(--mark);
 }
 
-/* ── inputs ────────────────────────────────────────────────────────────── */
+.done::before {
+  content: "";
+  width: 11px;
+  height: 11px;
+  border: 1px solid var(--text-2);
+  transition:
+    border-color 120ms ease,
+    background-color 120ms ease;
+}
+
+.done:hover:not(:disabled)::before {
+  border-color: var(--accent);
+  background: rgba(138, 180, 248, 0.25);
+}
+
+.done:disabled {
+  cursor: default;
+  opacity: 0.3;
+}
+
+/* Line 3: the last thing done. Grey, ticked, one line. */
+.did {
+  display: flex;
+  gap: 6px;
+  margin: 0;
+  font-size: 12px;
+  color: var(--text-2);
+  overflow: hidden;
+  white-space: nowrap;
+  text-overflow: ellipsis;
+}
+
+.did::before {
+  content: "\2713";
+  flex: none;
+  width: var(--mark);
+  text-align: center;
+}
+
+/* -- inputs ------------------------------------------------------------ */
 
 input {
   width: 100%;
   min-width: 0;
-  padding: 3px 6px;
+  padding: 2px 4px;
   font: inherit;
   color: var(--text);
   background: transparent;
-  border: 1px solid transparent;
-  border-radius: 7px;
+  border: 0;
+  outline: none;
   overflow: hidden;
   white-space: nowrap;
   text-overflow: ellipsis;
-  transition: background-color 140ms ease, border-color 140ms ease, box-shadow 140ms ease;
+  transition: box-shadow 120ms ease;
 }
 
 input::placeholder {
   color: var(--text-3);
 }
 
-input:hover:not(:focus) {
-  background: var(--raise);
+input:focus {
+  box-shadow: inset 0 0 0 1px var(--accent);
 }
 
-input:focus {
-  outline: none;
-  background: rgba(190, 215, 240, 0.06);
-  border-color: rgba(150, 200, 245, 0.4);
-  box-shadow: 0 0 0 3px rgba(111, 180, 242, 0.09);
+input:disabled {
+  cursor: default;
 }
 
 .row .name {
   font-size: 14px;
   font-weight: 600;
-  letter-spacing: -0.003em;
-}
-
-/* Indented to the name, so identity and task read as two ranks, not two peers. */
-.row .next {
-  margin-left: 31px;
-  width: calc(100% - 31px);
-  font-size: 12.8px;
-  font-weight: 400;
+  letter-spacing: -0.005em;
   color: var(--text-2);
 }
 
-/* ── last session ──────────────────────────────────────────────────────── */
-
-.last-meta {
-  padding: 0 8px 5px;
-  font-size: 10.8px;
-  font-weight: 600;
-  letter-spacing: 0.07em;
-  text-transform: uppercase;
-  color: var(--text-3);
+.row.is-star .name,
+.row .name:focus {
+  color: var(--text);
 }
 
-.last-what {
-  margin: 0;
-  padding: 0 8px;
+.next {
   font-size: 13px;
-  line-height: 1.5;
-  color: var(--text-2);
-  display: -webkit-box;
-  -webkit-line-clamp: 2;
-  -webkit-box-orient: vertical;
-  overflow: hidden;
+  font-weight: 500;
+  color: var(--text);
 }
 
-.note {
+/* -- log --------------------------------------------------------------- */
+
+.log {
+  flex: 1;
+  min-height: 0;
   margin: 0;
-  padding: 0 8px;
-  font-size: 12.5px;
-  line-height: 1.5;
-  color: var(--text-3);
-}
-
-.toggle {
-  margin: 7px 0 0 2px;
-  padding: 3px 7px;
-  font: inherit;
-  font-size: 11.3px;
-  color: var(--text-3);
-  background: transparent;
-  border: 1px solid transparent;
-  border-radius: 6px;
-  cursor: pointer;
-  transition: color 140ms ease, background-color 140ms ease;
-}
-
-.toggle:hover {
-  color: var(--text-2);
-  background: var(--raise);
-}
-
-.history {
-  margin: 8px 0 0;
-  padding: 0 8px;
-  max-height: 132px;
+  padding: 0 4px;
   overflow-y: auto;
   list-style: none;
 }
 
-.history li {
+.log li {
   display: flex;
   flex-direction: column;
-  gap: 3px;
+  gap: 2px;
+  padding: 8px 0;
 }
 
-.history li + li {
-  margin-top: 8px;
-  padding-top: 8px;
-  border-top: 1px solid var(--line);
+.log li + li {
+  border-top: 1px solid var(--border);
 }
 
-.history .when {
-  font-size: 10.5px;
-  font-weight: 600;
-  letter-spacing: 0.07em;
-  text-transform: uppercase;
-  color: var(--text-3);
-}
-
-.history .what {
-  font-size: 12.4px;
-  line-height: 1.45;
+.log .when {
+  font-size: 11px;
   color: var(--text-2);
 }
 
-.history .next {
-  font-size: 11.8px;
+.log .what {
+  font-size: 13px;
+  line-height: 1.5;
+  color: var(--text-2);
+}
+
+.log .what::before {
+  content: "\2713  ";
+  color: var(--text-2);
+}
+
+.log .then {
+  font-size: 11px;
   line-height: 1.4;
-  color: var(--text-3);
+  color: var(--text-2);
 }
 
-.history .next::before {
-  content: "→ ";
-  color: var(--accent);
+.log .then::before {
+  content: "\2192  next: ";
 }
 
-.history[hidden] {
-  display: none;
+.log .note {
+  font-size: 12px;
+  line-height: 1.55;
+  color: var(--text-2);
 }
 
-/* ── quick add ─────────────────────────────────────────────────────────── */
+/* -- quick add --------------------------------------------------------- */
 
 #quick {
-  padding: 9px 12px;
+  flex: none;
+  margin-top: 10px;
+  padding: 9px 10px;
   font-size: 13px;
-  background: rgba(4, 12, 24, 0.42);
-  border: 1px solid rgba(150, 190, 235, 0.13);
-  border-radius: 10px;
-}
-
-#quick:hover:not(:focus) {
-  background: rgba(4, 12, 24, 0.5);
+  background: var(--field);
+  border: 1px solid var(--border);
 }
 
 #quick:focus {
-  background: rgba(4, 12, 24, 0.55);
-  border-color: rgba(111, 180, 242, 0.5);
-  box-shadow: 0 0 0 3px rgba(111, 180, 242, 0.11);
+  border-color: var(--accent);
+  box-shadow: none;
 }
 
 #quick:disabled {
-  cursor: default;
-  opacity: 0.6;
+  opacity: 0.5;
 }
 
-/* ── empty state ───────────────────────────────────────────────────────── */
+/* -- empty state ------------------------------------------------------- */
 
 #empty {
   display: grid;
   place-content: center;
   justify-items: center;
-  gap: 14px;
+  gap: 12px;
   flex: 1;
-  padding: 24px 22px;
+  padding: 20px 16px;
   text-align: center;
 }
 
 #empty p {
   margin: 0;
   max-width: 30ch;
-  font-size: 12.5px;
+  font-size: 12px;
   line-height: 1.6;
-  color: var(--text-3);
+  color: var(--text-2);
 }
 
 #empty[hidden] {
@@ -531,36 +650,30 @@ input:focus {
 }
 
 #add-empty {
-  font: inherit;
-  font-size: 12.5px;
+  font-size: 12px;
   font-weight: 500;
-  padding: 7px 13px;
-  color: var(--accent);
-  background: rgba(23, 52, 84, 0.65);
-  border: 1px solid rgba(111, 180, 242, 0.3);
-  border-radius: 9px;
-  cursor: pointer;
-  transition: background-color 140ms ease, border-color 140ms ease, color 140ms ease;
+  padding: 7px 12px;
+  color: var(--text);
+  background: var(--elevated);
+  border: 1px solid var(--border);
+  transition:
+    color 120ms ease,
+    border-color 120ms ease;
 }
 
 #add-empty:hover {
-  background: rgba(35, 72, 112, 0.8);
-  border-color: rgba(111, 180, 242, 0.45);
-  color: var(--accent-hover);
+  color: var(--accent);
+  border-color: var(--accent);
 }
 
-/* ── focus ─────────────────────────────────────────────────────────────── */
+/* -- focus ------------------------------------------------------------- */
 
-.icon-btn:focus-visible,
-.logo:focus-visible,
-.toggle:focus-visible,
-.actions button:focus-visible,
-#add-empty:focus-visible {
-  outline: 2px solid rgba(160, 205, 250, 0.65);
-  outline-offset: 1px;
+button:focus-visible {
+  outline: 1px solid var(--accent);
+  outline-offset: -1px;
 }
 
-/* ── scrollbars ────────────────────────────────────────────────────────── */
+/* -- scrollbars -------------------------------------------------------- */
 
 ::-webkit-scrollbar {
   width: 10px;
@@ -571,15 +684,9 @@ input:focus {
 }
 
 ::-webkit-scrollbar-thumb {
-  background: rgba(150, 190, 235, 0.15);
+  background: var(--scroll);
   background-clip: content-box;
   border: 3px solid transparent;
-  border-radius: 8px;
-}
-
-::-webkit-scrollbar-thumb:hover {
-  background: rgba(150, 190, 235, 0.28);
-  background-clip: content-box;
 }
 
 @media (prefers-reduced-motion: reduce) {

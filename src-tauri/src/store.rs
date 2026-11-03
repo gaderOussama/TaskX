@@ -97,38 +97,6 @@ pub fn save(path: &Path, doc: &Value) -> Result<(), String> {
     fs::rename(&tmp, path).map_err(|e| e.to_string())
 }
 
-pub fn move_project(doc: &mut Value, id: &str, direction: &str) -> Result<(), String> {
-    let projects = doc
-        .get_mut("projects")
-        .and_then(|p| p.as_array_mut())
-        .ok_or("projects must be an array")?;
-
-    let mut list = projects.clone();
-    list.sort_by_key(|p| p.get("priority").and_then(|v| v.as_i64()).unwrap_or(0));
-
-    if let Some(from) = list
-        .iter()
-        .position(|p| p.get("id").and_then(|v| v.as_str()) == Some(id))
-    {
-        let to = if direction == "up" {
-            from as i64 - 1
-        } else {
-            from as i64 + 1
-        };
-        if to >= 0 && (to as usize) < list.len() {
-            list.swap(from, to as usize);
-        }
-    }
-
-    for (i, p) in list.iter_mut().enumerate() {
-        if let Some(obj) = p.as_object_mut() {
-            obj.insert("priority".to_string(), json!(i));
-        }
-    }
-    *projects = list;
-    Ok(())
-}
-
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -304,53 +272,5 @@ mod tests {
         let bak: Value =
             serde_json::from_str(&fs::read_to_string(with_suffix(&file, ".bak")).unwrap()).unwrap();
         assert_eq!(bak["projects"][0]["id"], json!("good"));
-    }
-
-    fn ids_and_priorities(doc: &Value) -> Vec<(String, i64)> {
-        doc["projects"]
-            .as_array()
-            .unwrap()
-            .iter()
-            .map(|p| {
-                (
-                    p["id"].as_str().unwrap().to_string(),
-                    p["priority"].as_i64().unwrap(),
-                )
-            })
-            .collect()
-    }
-
-    #[test]
-    fn move_up_renumbers() {
-        let mut doc = json!({ "version": 2, "projects": [project("a", 0), project("b", 1), project("c", 2)] });
-        move_project(&mut doc, "c", "up").unwrap();
-        assert_eq!(
-            ids_and_priorities(&doc),
-            vec![
-                ("a".to_string(), 0),
-                ("c".to_string(), 1),
-                ("b".to_string(), 2)
-            ]
-        );
-    }
-
-    #[test]
-    fn move_past_the_top_is_a_noop() {
-        let mut doc = json!({ "version": 2, "projects": [project("a", 0), project("b", 1)] });
-        move_project(&mut doc, "a", "up").unwrap();
-        assert_eq!(
-            ids_and_priorities(&doc),
-            vec![("a".to_string(), 0), ("b".to_string(), 1)]
-        );
-    }
-
-    #[test]
-    fn move_unknown_id_still_renumbers() {
-        let mut doc = json!({ "version": 2, "projects": [project("a", 5), project("b", 9)] });
-        move_project(&mut doc, "nope", "up").unwrap();
-        assert_eq!(
-            ids_and_priorities(&doc),
-            vec![("a".to_string(), 0), ("b".to_string(), 1)]
-        );
     }
 }

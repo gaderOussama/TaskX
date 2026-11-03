@@ -7,36 +7,93 @@ use tauri::{AppHandle, Emitter, LogicalPosition, LogicalSize, Manager, WebviewWi
 
 use crate::easing::make_ease;
 
-pub const COLLAPSED_W: f64 = 18.0;
-pub const EXPANDED_W: f64 = 370.0;
+/// Closed: one square tile carrying the mark.
+pub const ORB: f64 = 56.0;
+/// First open: a small card holding the starred projects and the log field.
+/// Its height follows its content, which the page measures and reports.
+pub const POPOVER_W: f64 = 320.0;
+pub const POPOVER_H: f64 = 200.0;
+/// The dashboard: project list on the left, the selected project on the right.
+pub const EXPANDED_W: f64 = 720.0;
 const EXPAND_MS: u64 = 340;
 const COLLAPSE_MS: u64 = 280;
 const FRAME_MS: u64 = 16;
 const POINTER_MS: u64 = 20;
 const HOVER_INTENT_MS: u64 = 80;
 const LEAVE_DELAY_MS: u64 = 450;
-/// Air between the floating panel and the left edge; the collapsed strip is
-/// flush instead, so opening reads as the surface lifting off the edge.
+/// Air between the panel and the left edge. The orb floats the same distance,
+/// so opening reads as the tile growing into the card.
 const EDGE_GAP: f64 = 16.0;
 const MAX_HEIGHT: f64 = 580.0;
 const MIN_V_GAP: f64 = 24.0;
 
+#[derive(Clone, Copy, PartialEq, Eq)]
+pub enum Mode {
+    Circle,
+    Popover,
+    Panel,
+}
+
+impl Mode {
+    pub fn key(self) -> &'static str {
+        match self {
+            Mode::Circle => "circle",
+            Mode::Popover => "popover",
+            Mode::Panel => "panel",
+        }
+    }
+
+    pub fn parse(key: &str) -> Mode {
+        match key {
+            "panel" => Mode::Panel,
+            "popover" => Mode::Popover,
+            _ => Mode::Circle,
+        }
+    }
+
+    fn open(self) -> bool {
+        self != Mode::Circle
+    }
+
+    /// Width, height, left edge and top edge of this mode. Only the resting tile
+    /// sits out past the screen edge; the cards open at the panel's inset.
+    pub fn frame(self, geometry: &Geometry, card_h: f64) -> (f64, f64, f64, f64) {
+        match self {
+            Mode::Circle => (ORB, ORB, geometry.orb_x, geometry.orb_y),
+            Mode::Popover => {
+                // Opens around the orb's centre line, but never past the
+                // panel's own top and bottom margins.
+                let height = card_h.min(geometry.height);
+                let top = geometry.panel_y;
+                let y = (geometry.orb_y + ORB / 2.0 - height / 2.0)
+                    .round()
+                    .clamp(top, top + geometry.height - height);
+                (POPOVER_W, height, geometry.x, y)
+            }
+            Mode::Panel => (EXPANDED_W, geometry.height, geometry.x, geometry.panel_y),
+        }
+    }
+
+}
+
 #[derive(Clone, Copy)]
 pub struct Geometry {
-    /// Collapsed x: flush against the screen edge.
     pub x: f64,
-    /// Expanded x: the floated position.
-    pub x_open: f64,
-    pub y: f64,
+    pub orb_x: f64,
+    pub panel_y: f64,
+    pub orb_y: f64,
     pub height: f64,
     pub scale: f64,
 }
 
 struct Inner {
     width: f64,
+    height: f64,
     x: f64,
-    expanded: bool,
+    y: f64,
+    mode: Mode,
     geometry: Geometry,
+    card_h: f64,
 }
 
 /// The panel's single source of truth. Everything the pointer watcher needs is
@@ -60,16 +117,20 @@ impl Default for Panel {
     fn default() -> Self {
         Self {
             inner: Mutex::new(Inner {
-                width: COLLAPSED_W,
+                width: ORB,
+                height: ORB,
                 x: 0.0,
-                expanded: false,
+                y: 0.0,
+                mode: Mode::Circle,
                 geometry: Geometry {
                     x: 0.0,
-                    x_open: EDGE_GAP,
-                    y: 0.0,
+                    orb_x: 0.0,
+                    panel_y: 0.0,
+                    orb_y: 0.0,
                     height: 580.0,
                     scale: 1.0,
                 },
+                card_h: POPOVER_H,
             }),
             generation: AtomicU64::new(0),
             hold: AtomicBool::new(false),
@@ -80,8 +141,7 @@ impl Default for Panel {
     }
 }
 
-/// Measured once at startup; afterwards the panel moves on its own and never
-/// re-queries the display.
+/// Where every mode sits on the current monitor's work area.
 pub fn measure(window: &WebviewWindow) -> Geometry {
     let scale = window.scale_factor().unwrap_or(1.0);
     let area = window.current_monitor().ok().flatten().map(|monitor| {
@@ -97,10 +157,13 @@ pub fn measure(window: &WebviewWindow) -> Geometry {
     // Tall enough to breathe, short enough to float: never taller than the
     // screen can hold with even margins above and below.
     let height = (ah - MIN_V_GAP * 2.0).min(MAX_HEIGHT).round();
+    let orb_y = ay + ((ah - ORB) / 2.0).round();
     Geometry {
-        x: ax,
-        x_open: ax + EDGE_GAP,
-        y: ay + ((ah - height) / 2.0).round(),
+        x: ax + EDGE_GAP,
+        // Half the tile hangs past the screen edge: present, but not in the way.
+        orb_x: ax - ORB / 2.0,
+        panel_y: ay + ((ah - height) / 2.0).round(),
+        orb_y,
         height,
         scale,
     }
@@ -109,8 +172,13 @@ pub fn measure(window: &WebviewWindow) -> Geometry {
 pub fn adopt(app: &AppHandle, geometry: Geometry) {
     let state = app.state::<Panel>();
     let mut inner = state.inner.lock().unwrap();
+    let (width, height, x, y) = Mode::Circle.frame(&geometry, inner.card_h);
     inner.geometry = geometry;
-    inner.x = geometry.x;
+    inner.width = width;
+    inner.height = height;
+    inner.x = x;
+    inner.y = y;
+    inner.mode = Mode::Circle;
 }
 
 pub fn set_hold(app: &AppHandle, hold: bool) {
@@ -121,84 +189,74 @@ pub fn set_reduced(app: &AppHandle, reduced: bool) {
     app.state::<Panel>().reduced.store(reduced, Ordering::SeqCst);
 }
 
-/// Acrylic covers the whole native rectangle, so the corners the CSS rounds
-/// away still showed a faint square. Clipping the window to the same shape
-/// removes it, and makes the rounding real for the pointer as well.
-#[cfg(target_os = "windows")]
-fn clip_to_round(window: &WebviewWindow, width: f64, height: f64, x: f64, scale: f64) {
-    use windows_sys::Win32::Graphics::Gdi::{CreateRoundRectRgn, SetWindowRgn};
-
-    let Ok(hwnd) = window.hwnd() else {
-        return;
-    };
-    let w = (width * scale).round() as i32;
-    let h = (height * scale).round() as i32;
-    // Matches the CSS clamp: a strip narrower than twice the radius ends in
-    // half-pills rather than in a wedge.
-    let r = ((width / 2.0).min(20.0) * scale).round() as i32;
-    // Flush against the edge, the left corners must stay square; the arc is
-    // placed outside the window so only the right side rounds.
-    let left = if x < 0.5 { -r } else { 0 };
-    // SAFETY: the region is created here and handed to the window, which owns
-    // it from that moment on.
-    unsafe {
-        let region = CreateRoundRectRgn(left, 0, w + 1, h + 1, r * 2, r * 2);
-        if !region.is_null() {
-            SetWindowRgn(hwnd.0, region, 1);
+/// The card's content changed height: if it is open, grow or shrink to fit.
+pub fn set_card_height(app: &AppHandle, height: f64) {
+    let state = app.state::<Panel>();
+    let refit = {
+        let mut inner = state.inner.lock().unwrap();
+        if (inner.card_h - height).abs() < 0.5 {
+            return;
         }
+        inner.card_h = height;
+        inner.mode == Mode::Popover
+    };
+    if refit {
+        set_mode(app, Mode::Popover, state.reduced.load(Ordering::SeqCst));
     }
 }
 
-#[cfg(not(target_os = "windows"))]
-fn clip_to_round(_: &WebviewWindow, _: f64, _: f64, _: f64, _: f64) {}
-
-pub fn clip_now(app: &AppHandle) {
-    if let Some(window) = app.get_webview_window("main") {
-        let state = app.state::<Panel>();
-        let inner = state.inner.lock().unwrap();
-        clip_to_round(
-            &window,
-            inner.width,
-            inner.geometry.height,
-            inner.x,
-            inner.geometry.scale,
-        );
-    }
+/// Size and place together: a window that resizes before it moves flickers.
+fn apply(window: &WebviewWindow, width: f64, height: f64, x: f64, y: f64) {
+    let _ = window.set_size(LogicalSize::new(width, height));
+    let _ = window.set_position(LogicalPosition::new(x, y));
 }
 
 pub fn toggle(app: &AppHandle) {
-    let (expanded, reduced) = {
+    let (mode, reduced) = {
         let state = app.state::<Panel>();
-        let expanded = state.inner.lock().unwrap().expanded;
-        (expanded, state.reduced.load(Ordering::SeqCst))
+        let mode = state.inner.lock().unwrap().mode;
+        (mode, state.reduced.load(Ordering::SeqCst))
     };
-    // Hidden in the tray counts as closed, whatever the last width was.
+    // Hidden in the tray counts as closed, whatever the mode was.
     let hidden = app
         .get_webview_window("main")
         .and_then(|window| window.is_visible().ok())
         .map(|visible| !visible)
         .unwrap_or(false);
-    set_by_user(app, hidden || !expanded, reduced);
+    let next = if hidden || mode == Mode::Circle {
+        Mode::Popover
+    } else {
+        Mode::Circle
+    };
+    set_by_user(app, next, reduced);
+    // Summoned from the keyboard or tray: take focus so the log field is ready
+    // to type into. Hover never does this, it would steal from the app in use.
+    if next.open() {
+        if let Some(window) = app.get_webview_window("main") {
+            let _ = window.set_focus();
+        }
+        let _ = app.emit("panel:focus", ());
+    }
 }
 
 /// Closing on purpose: the pointer may still be sitting on the panel, and it
 /// must not count as a reason to open again until it has left and come back.
-pub fn set_by_user(app: &AppHandle, expanded: bool, instant: bool) {
+pub fn set_by_user(app: &AppHandle, mode: Mode, instant: bool) {
     let state = app.state::<Panel>();
-    if expanded {
+    if mode.open() {
         state.awaiting_pointer.store(true, Ordering::SeqCst);
     } else {
         state.suppress_hover.store(true, Ordering::SeqCst);
     }
-    set_expanded(app, expanded, instant);
+    set_mode(app, mode, instant);
 }
 
-pub fn set_expanded(app: &AppHandle, expanded: bool, instant: bool) {
+pub fn set_mode(app: &AppHandle, mode: Mode, instant: bool) {
     let Some(window) = app.get_webview_window("main") else {
         return;
     };
     // Closed to the tray: the window has to come back before it can grow.
-    if expanded && !window.is_visible().unwrap_or(true) {
+    if mode.open() && !window.is_visible().unwrap_or(true) {
         let _ = window.show();
     }
     let state = app.state::<Panel>();
@@ -207,47 +265,54 @@ pub fn set_expanded(app: &AppHandle, expanded: bool, instant: bool) {
     // and stops, so the panel never fights itself.
     let generation = state.generation.fetch_add(1, Ordering::SeqCst) + 1;
 
-    let (from_w, to_w, from_x, to_x, y, height, scale) = {
+    // ponytail: re-measured per move, so a resolution or taskbar change made
+    // while resting is only picked up on the next open or close. Measured
+    // before the lock: asking the window may wait on the main thread.
+    let geometry = measure(&window);
+
+    let (from_w, from_h, from_x, from_y, to_w, to_h, to_x, to_y) = {
         let mut inner = state.inner.lock().unwrap();
-        inner.expanded = expanded;
+        inner.geometry = geometry;
+        let (width, height, x, y) = mode.frame(&inner.geometry, inner.card_h);
+        inner.mode = mode;
         (
             inner.width,
-            if expanded { EXPANDED_W } else { COLLAPSED_W },
+            inner.height,
             inner.x,
-            if expanded {
-                inner.geometry.x_open
-            } else {
-                inner.geometry.x
-            },
-            inner.geometry.y,
-            inner.geometry.height,
-            inner.geometry.scale,
+            inner.y,
+            width,
+            height,
+            x,
+            y,
         )
     };
 
     // Told before the surface moves: the renderer's content fade belongs to the
     // same movement, not to a later round trip.
-    let _ = app.emit("panel:state", expanded);
+    let _ = app.emit("panel:state", mode.key());
 
-    // Width and x travel together, so the panel lifts off the edge instead of
-    // growing out of it.
-    let settle = |inner: &mut Inner, width: f64, x: f64| {
+    let settle = |inner: &mut Inner, width: f64, height: f64, x: f64, y: f64| {
         inner.width = width;
+        inner.height = height;
         inner.x = x;
+        inner.y = y;
     };
 
-    if instant || (to_w - from_w).abs() < 0.5 {
-        settle(&mut state.inner.lock().unwrap(), to_w, to_x);
-        let _ = window.set_size(LogicalSize::new(to_w, height));
-        let _ = window.set_position(LogicalPosition::new(to_x, y));
-        clip_to_round(&window, to_w, height, to_x, scale);
+    let still = (to_w - from_w).abs() < 0.5
+        && (to_h - from_h).abs() < 0.5
+        && (to_x - from_x).abs() < 0.5
+        && (to_y - from_y).abs() < 0.5;
+    if instant || still {
+        settle(&mut state.inner.lock().unwrap(), to_w, to_h, to_x, to_y);
+        apply(&window, to_w, to_h, to_x, to_y);
         return;
     }
 
+    let opening = to_w > from_w || to_h > from_h;
     let app = app.clone();
     thread::spawn(move || {
-        let duration = Duration::from_millis(if expanded { EXPAND_MS } else { COLLAPSE_MS });
-        let ease = if expanded {
+        let duration = Duration::from_millis(if opening { EXPAND_MS } else { COLLAPSE_MS });
+        let ease = if opening {
             make_ease(0.22, 1.0, 0.36, 1.0)
         } else {
             make_ease(0.4, 0.0, 1.0, 1.0)
@@ -265,17 +330,22 @@ pub fn set_expanded(app: &AppHandle, expanded: bool, instant: bool) {
             let progress = (start.elapsed().as_secs_f64() / duration.as_secs_f64()).min(1.0);
             let eased = ease(progress);
             let width = from_w + (to_w - from_w) * eased;
+            let height = from_h + (to_h - from_h) * eased;
             let x = from_x + (to_x - from_x) * eased;
-            settle(&mut state.inner.lock().unwrap(), width, x);
+            let y = from_y + (to_y - from_y) * eased;
+            settle(&mut state.inner.lock().unwrap(), width, height, x, y);
 
             if let Some(window) = app.get_webview_window("main") {
-                let _ = window.set_size(LogicalSize::new(width, height));
-                let _ = window.set_position(LogicalPosition::new(x, y));
-                clip_to_round(&window, width, height, x, scale);
+                apply(&window, width, height, x, y);
             }
             if progress >= 1.0 {
                 break;
             }
+        }
+        // A resize can be coalesced away under the tween's frame rate; landing
+        // the final size once more keeps the webview's bounds in step with it.
+        if let Some(window) = app.get_webview_window("main") {
+            apply(&window, to_w, to_h, to_x, to_y);
         }
     });
 }
@@ -310,17 +380,17 @@ pub fn start_pointer_watch(app: AppHandle) {
             };
 
             let state = app.state::<Panel>();
-            let (inside, expanded, width) = {
+            let (inside, open, mid) = {
                 let inner = state.inner.lock().unwrap();
                 let g = inner.geometry;
                 let x0 = inner.x * g.scale;
-                let y0 = g.y * g.scale;
-                let (w, h) = (inner.width * g.scale, g.height * g.scale);
+                let y0 = inner.y * g.scale;
+                let (w, h) = (inner.width * g.scale, inner.height * g.scale);
                 let inside = (x as f64) >= x0
                     && (y as f64) >= y0
                     && (x as f64) < x0 + w
                     && (y as f64) < y0 + h;
-                (inside, inner.expanded, inner.width)
+                (inside, inner.mode.open(), inner.width > ORB + 0.5)
             };
             let hold = state.hold.load(Ordering::SeqCst);
             let reduced = state.reduced.load(Ordering::SeqCst);
@@ -329,7 +399,7 @@ pub fn start_pointer_watch(app: AppHandle) {
             if inside {
                 leave_since = None;
                 state.awaiting_pointer.store(false, Ordering::SeqCst);
-                if expanded {
+                if open {
                     enter_since = None;
                     continue;
                 }
@@ -338,26 +408,26 @@ pub fn start_pointer_watch(app: AppHandle) {
                     enter_since = None;
                     continue;
                 }
-                // Back while the panel is still collapsing: reverse at once. A
+                // Back while the orb is still growing back: reverse at once. A
                 // fresh approach waits for intent so a passing pointer is ignored.
-                if width > COLLAPSED_W + 0.5 {
+                if mid {
                     enter_since = None;
-                    set_expanded(&app, true, reduced);
+                    set_mode(&app, Mode::Popover, reduced);
                     continue;
                 }
                 let since = *enter_since.get_or_insert_with(Instant::now);
                 if since.elapsed() >= Duration::from_millis(HOVER_INTENT_MS) {
                     enter_since = None;
-                    set_expanded(&app, true, reduced);
+                    set_mode(&app, Mode::Popover, reduced);
                 }
             } else {
                 enter_since = None;
                 state.suppress_hover.store(false, Ordering::SeqCst);
-                if expanded && !hold && !awaiting {
+                if open && !hold && !awaiting {
                     let since = *leave_since.get_or_insert_with(Instant::now);
                     if since.elapsed() >= Duration::from_millis(LEAVE_DELAY_MS) {
                         leave_since = None;
-                        set_expanded(&app, false, reduced);
+                        set_mode(&app, Mode::Circle, reduced);
                     }
                 } else {
                     leave_since = None;
