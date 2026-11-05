@@ -57,3 +57,11 @@ Each project holds `entries` (a dated log, oldest first; nothing is ever removed
 Copy the file before you edit it by hand: if it will not parse, the app starts empty and saves the unreadable copy as `data.json.corrupt.bak`.
 
 Set `TASKX_DATA` to a path to run against a different file, which is how the tests stay off your real data.
+
+## Contributing
+
+Issues and pull requests are welcome. Read [CONTRIBUTING.md](CONTRIBUTING.md) first: it covers how to open an issue, how to propose a pull request, and the development workflow.
+
+## License
+
+[MIT](LICENSE)
