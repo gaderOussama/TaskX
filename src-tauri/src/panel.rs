@@ -3,7 +3,9 @@ use std::sync::Mutex;
 use std::thread;
 use std::time::{Duration, Instant};
 
-use tauri::{AppHandle, Emitter, LogicalPosition, LogicalSize, Manager, WebviewWindow};
+use tauri::{AppHandle, Emitter, Manager, WebviewWindow};
+#[cfg(not(target_os = "windows"))]
+use tauri::{LogicalPosition, LogicalSize};
 
 use crate::easing::make_ease;
 
@@ -205,8 +207,55 @@ pub fn set_card_height(app: &AppHandle, height: f64) {
     }
 }
 
+/// Where tween frames land. Resolved once per move: asking the window for its
+/// handle or scale goes through the main thread, too slow to repeat per frame.
+#[cfg(target_os = "windows")]
+#[derive(Clone, Copy)]
+struct Target {
+    hwnd: isize,
+    scale: f64,
+}
+
+#[cfg(target_os = "windows")]
+fn target(window: &WebviewWindow) -> Option<Target> {
+    let hwnd = window.hwnd().ok()?.0 as isize;
+    let scale = window.scale_factor().unwrap_or(1.0);
+    Some(Target { hwnd, scale })
+}
+
 /// Size and place together: a window that resizes before it moves flickers.
-fn apply(window: &WebviewWindow, width: f64, height: f64, x: f64, y: f64) {
+/// On Windows this is one SetWindowPos per frame, so each tween step costs a
+/// single move and a single webview relayout instead of two of each.
+#[cfg(target_os = "windows")]
+fn apply(target: &Target, width: f64, height: f64, x: f64, y: f64) {
+    use windows_sys::Win32::UI::WindowsAndMessaging::{
+        SetWindowPos, SWP_NOACTIVATE, SWP_NOOWNERZORDER, SWP_NOZORDER,
+    };
+    let px = |value: f64| (value * target.scale).round() as i32;
+    // SAFETY: hwnd is this app's own window; SetWindowPos only moves it.
+    unsafe {
+        SetWindowPos(
+            target.hwnd as _,
+            std::ptr::null_mut(),
+            px(x),
+            px(y),
+            px(width),
+            px(height),
+            SWP_NOZORDER | SWP_NOOWNERZORDER | SWP_NOACTIVATE,
+        );
+    }
+}
+
+#[cfg(not(target_os = "windows"))]
+type Target = WebviewWindow;
+
+#[cfg(not(target_os = "windows"))]
+fn target(window: &WebviewWindow) -> Option<Target> {
+    Some(window.clone())
+}
+
+#[cfg(not(target_os = "windows"))]
+fn apply(window: &Target, width: f64, height: f64, x: f64, y: f64) {
     let _ = window.set_size(LogicalSize::new(width, height));
     let _ = window.set_position(LogicalPosition::new(x, y));
 }
@@ -304,9 +353,14 @@ pub fn set_mode(app: &AppHandle, mode: Mode, instant: bool) {
         && (to_y - from_y).abs() < 0.5;
     if instant || still {
         settle(&mut state.inner.lock().unwrap(), to_w, to_h, to_x, to_y);
-        apply(&window, to_w, to_h, to_x, to_y);
+        if let Some(target) = target(&window) {
+            apply(&target, to_w, to_h, to_x, to_y);
+        }
         return;
     }
+    let Some(target) = target(&window) else {
+        return;
+    };
 
     let opening = to_w > from_w || to_h > from_h;
     let app = app.clone();
@@ -335,18 +389,14 @@ pub fn set_mode(app: &AppHandle, mode: Mode, instant: bool) {
             let y = from_y + (to_y - from_y) * eased;
             settle(&mut state.inner.lock().unwrap(), width, height, x, y);
 
-            if let Some(window) = app.get_webview_window("main") {
-                apply(&window, width, height, x, y);
-            }
+            apply(&target, width, height, x, y);
             if progress >= 1.0 {
                 break;
             }
         }
         // A resize can be coalesced away under the tween's frame rate; landing
         // the final size once more keeps the webview's bounds in step with it.
-        if let Some(window) = app.get_webview_window("main") {
-            apply(&window, to_w, to_h, to_x, to_y);
-        }
+        apply(&target, to_w, to_h, to_x, to_y);
     });
 }
 

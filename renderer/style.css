@@ -690,6 +690,57 @@ input:disabled {
   border-color: var(--accent);
 }
 
+/* -- confirm dialog ---------------------------------------------------- */
+
+#ask {
+  width: min(300px, calc(100vw - 32px));
+  padding: 16px;
+  color: var(--text);
+  background: var(--elevated);
+  border: 1px solid var(--border);
+}
+
+#ask::backdrop {
+  background: rgba(0, 0, 0, 0.6);
+}
+
+#ask p {
+  margin: 0 0 16px;
+  font-size: 13px;
+  line-height: 1.4;
+}
+
+.ask-actions {
+  display: flex;
+  justify-content: flex-end;
+  gap: 8px;
+}
+
+.ask-actions button {
+  font-size: 12px;
+  font-weight: 500;
+  padding: 7px 12px;
+  color: var(--text-2);
+  background: transparent;
+  border: 1px solid var(--border);
+}
+
+.ask-actions button:hover {
+  color: var(--text);
+  border-color: rgba(255, 255, 255, 0.38);
+}
+
+.ask-actions .danger {
+  color: var(--danger);
+  border-color: rgba(217, 119, 119, 0.4);
+}
+
+.ask-actions .danger:hover {
+  color: #fff;
+  background: var(--danger);
+  border-color: var(--danger);
+}
+
 /* -- focus ------------------------------------------------------------- */
 
 button:focus-visible {

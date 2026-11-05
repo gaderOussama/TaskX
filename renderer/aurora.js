@@ -19,7 +19,14 @@
   let h = 0;
   let S = 4;
   let grad = null;
+  let sky = null;
+  let vg = null;
   let raf = 0;
+  let last = 0;
+  let resizeTimer = 0;
+  let startTimer = 0;
+  // The lights drift slowly: 30 fps looks the same and halves the work.
+  const FRAME_MS = 1000 / 30;
 
   function resize() {
     const d = Math.min(window.devicePixelRatio || 1, 2);
@@ -34,7 +41,22 @@
     bc.width = Math.max(1, Math.ceil(ac.width / 6));
     bc.height = Math.max(1, Math.ceil(ac.height / 6));
     grad = null;
-    if (!raf) frame();
+    sky = ctx.createLinearGradient(0, 0, 0, h);
+    sky.addColorStop(0, 'rgba(14,15,18,1)');
+    sky.addColorStop(0.45, 'rgba(4,4,5,1)');
+    sky.addColorStop(1, 'rgba(0,0,0,1)');
+    vg = ctx.createRadialGradient(w / 2, h * 0.35, Math.min(w, h) * 0.3, w / 2, h * 0.5, Math.hypot(w, h) * 0.7);
+    vg.addColorStop(0, 'rgba(0,0,0,0)');
+    vg.addColorStop(1, 'rgba(0,0,0,0.65)');
+    if (!raf && w > 0) frame();
+  }
+
+  // The window resizes every frame while it opens; reallocating the canvas
+  // each time is what made the transition stutter. The old bitmap stretches
+  // until the size settles.
+  function resizeSoon() {
+    clearTimeout(resizeTimer);
+    resizeTimer = setTimeout(resize, 120);
   }
 
   function frame() {
@@ -89,10 +111,6 @@
 
     ctx.globalCompositeOperation = 'source-over';
     ctx.globalAlpha = 1;
-    const sky = ctx.createLinearGradient(0, 0, 0, h);
-    sky.addColorStop(0, 'rgba(14,15,18,1)');
-    sky.addColorStop(0.45, 'rgba(4,4,5,1)');
-    sky.addColorStop(1, 'rgba(0,0,0,1)');
     ctx.fillStyle = sky;
     ctx.fillRect(0, 0, w, h);
     ctx.globalCompositeOperation = 'lighter';
@@ -103,24 +121,28 @@
     ctx.globalAlpha = 1;
     ctx.drawImage(ac, 0, 0, w, h);
     ctx.globalCompositeOperation = 'source-over';
-    const vg = ctx.createRadialGradient(w / 2, h * 0.35, Math.min(w, h) * 0.3, w / 2, h * 0.5, Math.hypot(w, h) * 0.7);
-    vg.addColorStop(0, 'rgba(0,0,0,0)');
-    vg.addColorStop(1, 'rgba(0,0,0,0.65)');
     ctx.fillStyle = vg;
     ctx.fillRect(0, 0, w, h);
   }
 
-  function loop() {
-    frame();
+  function loop(now) {
     raf = requestAnimationFrame(loop);
+    if (now - last < FRAME_MS) return;
+    last = now;
+    frame();
   }
 
   // Follow the mode the page mirrors from Rust: running in the dashboard only.
+  // Starts once the window has finished growing, so the lights never compete
+  // with the opening animation for the same frames.
   function sync() {
     const wide = document.documentElement.dataset.mode === 'panel';
+    clearTimeout(startTimer);
     if (wide && !raf) {
-      if (reduced) frame();
-      else raf = requestAnimationFrame(loop);
+      startTimer = setTimeout(() => {
+        if (reduced) frame();
+        else raf = requestAnimationFrame(loop);
+      }, 380);
     }
     if (!wide && raf) {
       cancelAnimationFrame(raf);
@@ -128,7 +150,7 @@
     }
   }
 
-  new ResizeObserver(resize).observe(c);
+  new ResizeObserver(resizeSoon).observe(c);
   new MutationObserver(sync).observe(document.documentElement, { attributes: true, attributeFilter: ['data-mode'] });
   resize();
   sync();

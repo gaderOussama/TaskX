@@ -249,9 +249,21 @@ async function markDone(project) {
   field?.focus();
 }
 
+// The themed stand-in for confirm(): a native <dialog>, centred by the browser.
+function ask(text) {
+  const dialog = document.getElementById('ask');
+  document.getElementById('ask-text').textContent = text;
+  dialog.returnValue = '';
+  dialog.showModal();
+  dialog.querySelector('[value="no"]').focus();
+  return new Promise((resolve) => {
+    dialog.addEventListener('close', () => resolve(dialog.returnValue === 'yes'), { once: true });
+  });
+}
+
 async function deleteProject(project) {
-  const blank = String(project.name ?? '').trim() === '';
-  if (!blank && !confirm('Delete this project?')) return;
+  const name = String(project.name ?? '').trim();
+  if (name && !(await ask(`Delete "${name}" and its whole log?`))) return;
 
   const index = Array.from(list.children).findIndex((li) => li.dataset.id === project.id);
   const ok = await commitOrRollback(() => {
@@ -575,6 +587,8 @@ async function init() {
 
   document.addEventListener('keydown', (event) => {
     if (event.key === 'Escape') {
+      // Escape in the dialog only closes the dialog.
+      if (document.getElementById('ask').open) return;
       setMode('circle');
       return;
     }
