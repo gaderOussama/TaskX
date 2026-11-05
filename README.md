@@ -1,10 +1,34 @@
 # TaskX
 
+**Your projects, one glance away.** A tiny always-on-top panel for Windows that remembers what you did on each project and what comes next.
+
+![TaskX: the tile opens into the card, then the dashboard](docs/media/demo.gif)
+
+<sub>[Full demo clip (MP4)](docs/media/demo.mp4)</sub>
+
+## Three sizes
+
+| The card | The dashboard |
+| --- | --- |
+| ![The card: starred projects and the log field](docs/media/card.png) | ![The dashboard: every project on the left, the selected one's next step and log on the right](docs/media/dashboard.png) |
+| Point at the tile on the left edge of the screen, or press `Alt+X`. Every starred project, its next step, and a field to log what you just did. | Open it from the card's header. Every project on the left; on the right, the selected one's next step and its full dated log, over slow northern lights. |
+
+At rest it is a single square tile with the Northstar mark, half tucked past the left edge of the screen.
+
+## Features
+
+- **Star what matters**: starred projects sit on top, in the card and the dashboard.
+- **Next step with a done box**: tick it and it moves into the log, ready for the next one.
+- **A log that never forgets**: every entry is dated and kept forever.
+- **Out of your way**: opens on hover, closes when you leave, never steals focus unless you ask with `Alt+X`.
+- **Plain local data**: one JSON file in `%APPDATA%`, no account, no cloud, no telemetry.
+- **Light**: about 30 MB of memory, close to zero CPU at rest.
+
 ## What it is
 
 A small, sharp-cornered panel that floats off the left edge of the desktop. It sits there as one square tile, opens when you move towards it, and shows your projects in the priority order you set. Each project keeps a log of what you did on it — every entry stays, dated, forever — plus the one line saying what's next.
 
-The look is deliberately plain: solid surfaces, hairline borders, one accent colour, no blur, no gradients, no shadows. Dark, always — it does not follow the Windows app theme.
+The look is deliberately plain: solid surfaces, hairline borders, one accent colour, no blur, no shadows. The only movement is the faint aurora behind the dashboard. Dark, always — it does not follow the Windows app theme.
 
 ## Run it
 
