@@ -1,15 +1,28 @@
 use serde_json::{json, Value};
 use std::fs;
 use std::path::{Path, PathBuf};
+use std::sync::atomic::{AtomicU64, Ordering};
 use std::time::{SystemTime, UNIX_EPOCH};
 
-pub const VERSION: u64 = 2;
+pub const VERSION: u64 = 3;
 
 pub fn empty_doc() -> Value {
-    json!({ "version": VERSION, "projects": [] })
+    json!({ "version": VERSION, "projects": [], "inbox": [] })
 }
 
-fn now_ms() -> u64 {
+/// Same file the app has always used, so the existing projects are not migrated
+/// or moved. `TASKX_DATA` exists so tests never touch the real one.
+pub fn data_path() -> PathBuf {
+    if let Ok(path) = std::env::var("TASKX_DATA") {
+        return PathBuf::from(path);
+    }
+    let base = std::env::var("APPDATA")
+        .map(PathBuf::from)
+        .unwrap_or_else(|_| PathBuf::from("."));
+    base.join("taskx").join("data.json")
+}
+
+pub fn now_ms() -> u64 {
     SystemTime::now()
         .duration_since(UNIX_EPOCH)
         .map(|d| d.as_millis() as u64)
@@ -21,7 +34,12 @@ fn with_suffix(path: &Path, suffix: &str) -> PathBuf {
 }
 
 // v1 kept one `last` string per project. Fold it into the log, never drop it.
+// v3 only adds optional fields (inbox, note, area, ideas, settings): a v2 file
+// just gains an empty inbox, everything else is left as it was.
 pub fn migrate(mut doc: Value) -> Value {
+    if !doc.get("inbox").map(|i| i.is_array()).unwrap_or(false) {
+        doc["inbox"] = json!([]);
+    }
     if let Some(list) = doc.get_mut("projects").and_then(|p| p.as_array_mut()) {
         for p in list.iter_mut() {
             let Some(obj) = p.as_object_mut() else { continue };
@@ -97,6 +115,74 @@ pub fn save(path: &Path, doc: &Value) -> Result<(), String> {
     fs::rename(&tmp, path).map_err(|e| e.to_string())
 }
 
+/// The file's mtime in ms, 0 when missing. The renderer polls it to notice
+/// writes made by the MCP server.
+pub fn stamp(path: &Path) -> u64 {
+    fs::metadata(path)
+        .and_then(|m| m.modified())
+        .ok()
+        .and_then(|t| t.duration_since(UNIX_EPOCH).ok())
+        .map(|d| d.as_millis() as u64)
+        .unwrap_or(0)
+}
+
+static SEQ: AtomicU64 = AtomicU64::new(0);
+
+fn new_id() -> String {
+    format!("{:x}-{:x}", now_ms(), SEQ.fetch_add(1, Ordering::SeqCst))
+}
+
+fn push(target: &mut Value, key: &str, item: Value) {
+    if !target[key].is_array() {
+        target[key] = json!([]);
+    }
+    target[key].as_array_mut().unwrap().push(item);
+}
+
+/// By id, or by name ignoring case and surrounding spaces.
+pub fn find_project<'a>(doc: &'a mut Value, key: &str) -> Option<&'a mut Value> {
+    let key = key.trim();
+    let lower = key.to_lowercase();
+    doc.get_mut("projects")?.as_array_mut()?.iter_mut().find(|p| {
+        p["id"].as_str() == Some(key)
+            || p["name"].as_str().map(|n| n.trim().to_lowercase() == lower).unwrap_or(false)
+    })
+}
+
+/// Record what was just done, next to the next step it was done under.
+pub fn add_log(doc: &mut Value, project: &str, text: &str) -> Option<()> {
+    let p = find_project(doc, project)?;
+    let at = now_ms();
+    let next = p["next"].as_str().unwrap_or("").trim().to_string();
+    push(p, "entries", json!({ "at": at, "text": text.trim(), "next": next }));
+    p["updatedAt"] = json!(at);
+    Some(())
+}
+
+/// A replaced next step is kept as an idea: nothing is ever lost.
+pub fn set_next(doc: &mut Value, project: &str, text: &str) -> Option<()> {
+    let p = find_project(doc, project)?;
+    let at = now_ms();
+    let old = p["next"].as_str().unwrap_or("").trim().to_string();
+    let new = text.trim();
+    if !old.is_empty() && old != new {
+        push(p, "ideas", json!({ "id": new_id(), "at": at, "text": old }));
+    }
+    p["next"] = json!(new);
+    p["updatedAt"] = json!(at);
+    Some(())
+}
+
+pub fn add_idea(doc: &mut Value, project: &str, text: &str) -> Option<()> {
+    let p = find_project(doc, project)?;
+    push(p, "ideas", json!({ "id": new_id(), "at": now_ms(), "text": text.trim() }));
+    Some(())
+}
+
+pub fn capture(doc: &mut Value, text: &str) {
+    push(doc, "inbox", json!({ "id": new_id(), "at": now_ms(), "text": text.trim() }));
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -123,7 +209,7 @@ mod tests {
     #[test]
     fn save_then_load_round_trips() {
         let file = tmp_file();
-        let doc = json!({ "version": 2, "projects": [project("a", 0), project("b", 1)] });
+        let doc = json!({ "version": 3, "projects": [project("a", 0), project("b", 1)], "inbox": [{ "id": "x", "at": 1, "text": "t" }], "settings": { "whisper": true } });
         save(&file, &doc).unwrap();
         assert_eq!(load(&file), doc);
     }
@@ -184,7 +270,7 @@ mod tests {
         )
         .unwrap();
         let doc = load(&file);
-        assert_eq!(doc["version"], json!(2));
+        assert_eq!(doc["version"], json!(3));
         assert_eq!(
             doc["projects"][0]["entries"],
             json!([{ "at": 42, "text": "fixed the parser" }])
@@ -272,5 +358,77 @@ mod tests {
         let bak: Value =
             serde_json::from_str(&fs::read_to_string(with_suffix(&file, ".bak")).unwrap()).unwrap();
         assert_eq!(bak["projects"][0]["id"], json!("good"));
+    }
+
+    #[test]
+    fn v2_file_loads_intact_and_gains_inbox() {
+        let file = tmp_file();
+        let p = json!({
+            "id": "a", "name": "Alpha", "priority": 2, "star": true, "next": "ship it", "updatedAt": 9,
+            "entries": [{ "at": 1, "text": "one", "next": "two" }]
+        });
+        fs::write(&file, json!({ "version": 2, "projects": [p.clone()] }).to_string()).unwrap();
+        let doc = load(&file);
+        assert_eq!(doc["version"], json!(3));
+        assert_eq!(doc["inbox"], json!([]));
+        assert_eq!(doc["projects"][0], p);
+        save(&file, &doc).unwrap();
+        assert_eq!(load(&file), doc);
+    }
+
+    #[test]
+    fn migrate_keeps_an_existing_inbox() {
+        let inbox = json!([{ "id": "x", "at": 1, "text": "keep" }]);
+        let doc = migrate(json!({ "version": 3, "projects": [], "inbox": inbox.clone() }));
+        assert_eq!(doc["inbox"], inbox);
+    }
+
+    #[test]
+    fn find_by_id_or_trimmed_case_insensitive_name() {
+        let mut doc = json!({ "projects": [project("a", 0), { "id": "b", "name": "Big Thing" }] });
+        assert_eq!(find_project(&mut doc, "a").unwrap()["id"], json!("a"));
+        assert_eq!(find_project(&mut doc, "  big THING ").unwrap()["id"], json!("b"));
+        assert!(find_project(&mut doc, "nope").is_none());
+    }
+
+    #[test]
+    fn add_log_records_current_next() {
+        let mut doc = json!({ "projects": [{ "id": "a", "name": "A", "next": " go ", "entries": [], "updatedAt": 0 }] });
+        add_log(&mut doc, "A", " did it ").unwrap();
+        let p = &doc["projects"][0];
+        assert_eq!(p["entries"][0]["text"], json!("did it"));
+        assert_eq!(p["entries"][0]["next"], json!("go"));
+        assert!(p["updatedAt"].as_u64().unwrap() > 0);
+        assert!(add_log(&mut doc, "zzz", "x").is_none());
+    }
+
+    #[test]
+    fn set_next_keeps_the_old_one_as_an_idea() {
+        let mut doc = json!({ "projects": [{ "id": "a", "name": "A", "next": "old", "entries": [] }] });
+        set_next(&mut doc, "a", "new").unwrap();
+        set_next(&mut doc, "a", "new").unwrap(); // same text: no duplicate idea
+        let p = &doc["projects"][0];
+        assert_eq!(p["next"], json!("new"));
+        assert_eq!(p["ideas"].as_array().unwrap().len(), 1);
+        assert_eq!(p["ideas"][0]["text"], json!("old"));
+    }
+
+    #[test]
+    fn ideas_and_capture_get_unique_ids() {
+        let mut doc = json!({ "projects": [{ "id": "a", "name": "A" }] });
+        add_idea(&mut doc, "a", "i1").unwrap();
+        add_idea(&mut doc, "a", "i2").unwrap();
+        capture(&mut doc, " c ");
+        let ideas = doc["projects"][0]["ideas"].as_array().unwrap();
+        assert_ne!(ideas[0]["id"], ideas[1]["id"]);
+        assert_eq!(doc["inbox"][0]["text"], json!("c"));
+    }
+
+    #[test]
+    fn stamp_is_zero_when_missing_and_set_after_save() {
+        let file = tmp_file();
+        assert_eq!(stamp(&file), 0);
+        save(&file, &empty_doc()).unwrap();
+        assert!(stamp(&file) > 0);
     }
 }

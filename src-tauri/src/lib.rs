@@ -1,24 +1,13 @@
 mod easing;
+pub mod mcp;
 mod panel;
 mod store;
 
 use serde_json::Value;
-use std::path::PathBuf;
+use store::data_path;
 use tauri::menu::{CheckMenuItemBuilder, MenuBuilder, MenuItemBuilder};
 use tauri::tray::{MouseButton, MouseButtonState, TrayIconBuilder, TrayIconEvent};
-use tauri::{AppHandle, Manager};
-
-/// Same file the app has always used, so the existing projects are not migrated
-/// or moved. `TASKX_DATA` exists so tests never touch the real one.
-fn data_path() -> PathBuf {
-    if let Ok(path) = std::env::var("TASKX_DATA") {
-        return PathBuf::from(path);
-    }
-    let base = std::env::var("APPDATA")
-        .map(PathBuf::from)
-        .unwrap_or_else(|_| PathBuf::from("."));
-    base.join("taskx").join("data.json")
-}
+use tauri::{AppHandle, Emitter, Manager};
 
 /// Windows paints a native caption over this window whenever it is activated,
 /// even though the window is a popup with no caption bits and DWM reports no
@@ -63,9 +52,23 @@ fn data_load() -> Value {
     store::load(&data_path())
 }
 
+/// Returns the file's mtime in ms after the save, so the renderer can tell its
+/// own write from one made by the MCP server.
 #[tauri::command]
-fn data_save(doc: Value) -> Result<(), String> {
-    store::save(&data_path(), &doc)
+fn data_save(doc: Value) -> Result<u64, String> {
+    store::save(&data_path(), &doc)?;
+    Ok(store::stamp(&data_path()))
+}
+
+/// mtime in ms of the data file, 0 if missing; polled to catch outside writes.
+#[tauri::command]
+fn data_stamp() -> u64 {
+    store::stamp(&data_path())
+}
+
+#[tauri::command]
+fn panel_set_whisper(app: AppHandle, on: bool) {
+    panel::set_whisper(&app, on);
 }
 
 #[tauri::command]
@@ -96,9 +99,16 @@ fn build_tray(app: &AppHandle) -> tauri::Result<()> {
     let login = CheckMenuItemBuilder::with_id("login", "Start at login")
         .checked(app.autolaunch().is_enabled().unwrap_or(false))
         .build(app)?;
+    let whisper = CheckMenuItemBuilder::with_id("whisper", "Show next step on the tile")
+        .checked(
+            store::load(&data_path())["settings"]["whisper"]
+                .as_bool()
+                .unwrap_or(false),
+        )
+        .build(app)?;
     let quit = MenuItemBuilder::with_id("quit", "Quit").build(app)?;
     let menu = MenuBuilder::new(app)
-        .items(&[&toggle, &login])
+        .items(&[&toggle, &login, &whisper])
         .separator()
         .item(&quit)
         .build()?;
@@ -120,6 +130,10 @@ fn build_tray(app: &AppHandle) -> tauri::Result<()> {
                 } else {
                     app.autolaunch().disable()
                 };
+            }
+            // The renderer owns the doc and saves it; we only tell it.
+            "whisper" => {
+                let _ = app.emit("settings:whisper", whisper.is_checked().unwrap_or(false));
             }
             "quit" => app.exit(0),
             _ => {}
@@ -155,7 +169,9 @@ pub fn run() {
             panel_set_mode,
             panel_set_hold,
             panel_set_reduced,
-            panel_set_card_height
+            panel_set_card_height,
+            panel_set_whisper,
+            data_stamp
         ])
         .setup(|app| {
             let window = app
@@ -163,7 +179,7 @@ pub fn run() {
                 .expect("the panel window is declared in tauri.conf.json");
 
             let geometry = panel::measure(&window);
-            let (width, height, x, y) = panel::Mode::Circle.frame(&geometry, panel::POPOVER_H);
+            let (width, height, x, y) = panel::Mode::Circle.frame(&geometry, panel::POPOVER_H, false);
             window.set_size(tauri::LogicalSize::new(width, height))?;
             window.set_position(tauri::LogicalPosition::new(x, y))?;
             panel::adopt(app.handle(), geometry);
@@ -203,6 +219,17 @@ pub fn run() {
                     })
             {
                 eprintln!("Alt+X is already registered by another app: {err}");
+            }
+            let handle = app.handle().clone();
+            if let Err(err) =
+                app.global_shortcut()
+                    .on_shortcut("Alt+Shift+X", move |_app, _shortcut, event| {
+                        if event.state() == tauri_plugin_global_shortcut::ShortcutState::Pressed {
+                            panel::capture(&handle);
+                        }
+                    })
+            {
+                eprintln!("Alt+Shift+X is already registered by another app: {err}");
             }
 
             // Only when built for real, and only on first run (no data file yet):
