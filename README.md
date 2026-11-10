@@ -21,6 +21,13 @@ At rest it is a single square tile with the Northstar mark, half tucked past the
 - **Next step with a done box**: tick it and it moves into the log, ready for the next one.
 - **A log that never forgets**: every entry is dated and kept forever.
 - **Out of your way**: opens on hover, closes when you leave, never steals focus unless you ask with `Alt+X`.
+- **Capture inbox**: `Alt+Shift+X`, type, `Enter`. The thought waits in the inbox until you move it to a project.
+- **Welcome back**: each project has a pinned note (what it is, how to run it, why), and says how long you were away.
+- **Ideas per project**: a folded list behind the one next step. Promote one when the step is done.
+- **Areas**: give projects an area (work, reading…) and filter by tab. No areas, no tabs.
+- **Recap**: copy today's or this week's log as Markdown, for a standup or a timesheet.
+- **Next step on the tile**: optional, from the notification-area menu. The resting tile carries the top next step.
+- **Works with AI tools**: a local MCP server lets Claude read a project and log what it did. See below.
 - **Plain local data**: one JSON file in `%APPDATA%`, no account, no cloud, no telemetry.
 - **Light**: about 30 MB of memory, close to zero CPU at rest.
 
@@ -40,7 +47,7 @@ npm run build   # installer in src-tauri/target/release/bundle
 
 Requires the Rust toolchain and the MSVC build tools; WebView2 ships with Windows.
 
-`npm test` runs the Rust tests: the storage layer (15 cases, ported from the earlier Electron build) and the easing curve the panel animates on.
+`npm test` runs the Rust tests: the storage layer, the MCP server and the easing curve the panel animates on.
 
 ## Using it
 
@@ -59,10 +66,21 @@ Moving around:
 - Move away: the card closes back to the tile after 450 ms. It never closes under you while you are typing or holding a half-typed log line.
 - ↑/↓ on a row reorder it within its group; a starred project never sinks below a plain one.
 - The pin keeps the panel open. The chevron or `Escape` closes it. Alt+F4 hides it to the notification area.
+- `Alt+Shift+X` opens the card with the cursor in the capture field.
 - `Ctrl+N` adds a project, `Enter` commits a log line, `Escape` drops a half-typed one.
 - The notification-area menu has "Start at login". It is on after the first install, and stays off once you turn it off.
 
 The panel keeps a single instance running; starting it again just opens it. It is always above other windows and never appears in the taskbar. Its sizes and position are constants in `src-tauri/src/panel.rs`. Nothing is composited behind it: the surfaces are opaque, which is what makes the design hold on Windows 10 without acrylic, Mica or `backdrop-filter`.
+
+## Use it from Claude (MCP)
+
+The same executable is a local [MCP](https://modelcontextprotocol.io) server when started with `--mcp`. It reads and writes the same `data.json`, with no account and no network. For Claude Code:
+
+```bash
+claude mcp add taskx -- "%LOCALAPPDATA%\TaskX	askx.exe" --mcp
+```
+
+Tools: `list_projects`, `get_project`, `add_log`, `set_next` (the old next step is kept as an idea), `add_idea`, `capture`. It can add; it cannot delete or reorder anything. The panel picks up outside changes within a couple of seconds, unless you are typing.
 
 ## Where your data lives
 
@@ -75,6 +93,8 @@ Windows:
 which is `C:\Users\<you>\AppData\Roaming\taskx\data.json`. The Tauri build reads and writes the same file the Electron build did, so nothing was migrated or moved.
 
 It is plain JSON — open it in any editor, copy it to back it up. Deleting the file resets the app to its empty state.
+
+The file also holds `inbox` (captured thoughts) and `settings`. Each project may hold `note`, `area` and `ideas`. Files from earlier versions load as they are.
 
 Each project holds `entries` (a dated log, oldest first; nothing is ever removed), `next`, and `star` when it is important. Typing is saved 300 ms after the last key. Each entry also keeps the `next` line as it stood at that moment, so the history shows what you meant to do next at the time. The app keeps the previous version of the file as `data.json.bak` on every write, and an unreadable one as `data.json.corrupt.bak`.
 

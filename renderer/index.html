@@ -29,6 +29,12 @@
               <path d="M12 12.2V20" />
             </svg>
           </button>
+          <button class="icon-btn" id="recap-btn" type="button" aria-label="Copy a recap of your log" title="Copy a recap of your log">
+            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
+              <path d="M7 3.5h7.5L19 8v12.5H7z" />
+              <path d="M10 12.5h6M10 16h6" />
+            </svg>
+          </button>
           <button class="icon-btn" id="expand" type="button" aria-label="Open the dashboard" title="Open the dashboard">
             <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
               <path d="M14.5 9.5L19 5M19 5h-4M19 5v4" />
@@ -43,8 +49,19 @@
         </div>
       </header>
 
+      <div class="whisper" id="whisper">
+        <span class="whisper-name" id="whisper-name"></span>
+        <span class="whisper-text" id="whisper-text"></span>
+      </div>
+
       <div class="panel-content">
+        <div class="top">
+          <input id="capture" type="text" autocomplete="off" spellcheck="false" placeholder="Capture a thought → Inbox" aria-label="Capture a thought" />
+          <nav id="areas" aria-label="Areas" hidden></nav>
+        </div>
+
         <section class="projects" aria-label="Projects">
+          <button id="inbox-row" type="button" title="Open the inbox" hidden></button>
           <ul id="list"></ul>
           <div id="empty" hidden>
             <p>No projects yet. Add one and keep your next step in sight.</p>
@@ -52,19 +69,32 @@
           </div>
         </section>
 
-        <section class="detail" aria-label="Selected project">
+        <section class="detail" aria-label="Selected project" data-view="project">
           <h2 class="detail-name" id="detail-name"></h2>
 
+          <ul class="inbox-list" id="inbox-list" tabindex="-1"></ul>
+
+          <input id="detail-area" type="text" list="areas-list" autocomplete="off" placeholder="area, e.g. work" title="Groups projects into tabs" aria-label="Area" />
+          <datalist id="areas-list"></datalist>
+          <textarea id="detail-note" rows="1" spellcheck="false" placeholder="What it is · how to run it · why" aria-label="Note"></textarea>
+
+          <p class="welcome" id="welcome" hidden></p>
           <h3 class="label">Next</h3>
           <div class="next-line">
             <button class="done" id="detail-done" type="button" aria-label="Mark next step done" title="Done"></button>
             <input id="detail-next" class="next" type="text" autocomplete="off" placeholder="what's next…" />
           </div>
 
+          <details id="ideas">
+            <summary class="label" id="ideas-sum">Ideas</summary>
+            <ul class="ideas-list" id="ideas-list"></ul>
+            <input id="idea" type="text" autocomplete="off" placeholder="An idea for later…" aria-label="An idea for later" />
+          </details>
+
           <h3 class="label">Log</h3>
           <ol class="log" id="log"></ol>
 
-          <input id="quick" type="text" autocomplete="off" spellcheck="false" placeholder="What did you do?" />
+          <input id="quick" class="boxed" type="text" autocomplete="off" spellcheck="false" placeholder="What did you do?" />
         </section>
       </div>
     </div>
@@ -74,6 +104,16 @@
         <div class="ask-actions">
           <button value="no" type="submit">Cancel</button>
           <button value="yes" type="submit" class="danger">Delete</button>
+        </div>
+      </form>
+    </dialog>
+    <dialog id="recap">
+      <form method="dialog">
+        <p id="recap-text"></p>
+        <div class="ask-actions">
+          <button type="button" id="recap-today">Copy today</button>
+          <button type="button" id="recap-week">Copy this week</button>
+          <button value="no" type="submit">Close</button>
         </div>
       </form>
     </dialog>

@@ -187,6 +187,14 @@ html[data-mode="panel"] .bar {
   fill-opacity: 0.18;
 }
 
+#recap-btn {
+  display: none;
+}
+
+html[data-mode="panel"] #recap-btn {
+  display: grid;
+}
+
 /* -- closed: one tile -------------------------------------------------- */
 
 html[data-mode="circle"] .panel:hover {
@@ -213,6 +221,49 @@ html[data-mode="circle"] .logo {
 html[data-mode="circle"] .mark {
   width: 20px;
   height: 20px;
+}
+
+/* The next step, whispered beside the tile when the tray setting is on. The
+   window is wider only then (Rust); the tile keeps its own 54 px. */
+.whisper {
+  display: none;
+}
+
+html[data-mode="circle"][data-whisper] .panel {
+  flex-direction: row;
+}
+
+html[data-mode="circle"][data-whisper] .bar {
+  flex: none;
+  width: 54px;
+}
+
+html[data-mode="circle"][data-whisper] .whisper {
+  display: flex;
+  flex: 1;
+  align-items: center;
+  gap: 8px;
+  min-width: 0;
+  padding: 0 12px;
+  font-size: 12px;
+  white-space: nowrap;
+  border-left: 1px solid var(--border);
+}
+
+.whisper-name {
+  flex: 0 1 auto;
+  max-width: 40%;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  color: var(--text-3);
+}
+
+.whisper-text {
+  flex: 1 1 0;
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  color: var(--text);
 }
 
 html[data-mode="circle"] .appname,
@@ -243,6 +294,74 @@ html[data-mode="panel"] .panel-content {
   transform: translateX(0);
   pointer-events: auto;
   transition-delay: 90ms;
+}
+
+/* The capture field and the area tabs; both belong to the card and the dashboard. */
+.top {
+  display: grid;
+  flex: none;
+  gap: 8px;
+  padding-bottom: 8px;
+}
+
+#areas {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 2px 14px;
+}
+
+#areas[hidden],
+html[data-mode="popover"] #areas {
+  display: none;
+}
+
+#areas button {
+  padding: 2px 0;
+  font-size: 12px;
+  color: var(--text-3);
+  border-bottom: 1px solid transparent;
+  transition: color 120ms ease;
+}
+
+#areas button:hover,
+#areas button[aria-pressed="true"] {
+  color: var(--text);
+}
+
+#areas button[aria-pressed="true"] {
+  border-bottom-color: var(--accent);
+}
+
+/* "Inbox · 3": a quiet line in the card, a row in the dashboard. */
+#inbox-row {
+  display: flex;
+  justify-content: space-between;
+  flex: none;
+  width: 100%;
+  padding: 4px 8px 4px 30px;
+  font-size: 12px;
+  text-align: left;
+  color: var(--text-2);
+  transition:
+    color 120ms ease,
+    background-color 120ms ease;
+}
+
+#inbox-row::after {
+  content: "\203A";
+}
+
+#inbox-row[hidden] {
+  display: none;
+}
+
+#inbox-row:hover,
+#inbox-row.is-selected {
+  color: var(--text);
+}
+
+#inbox-row:hover {
+  background: var(--veil);
 }
 
 .projects,
@@ -301,6 +420,33 @@ html[data-mode="popover"] .detail {
 html[data-mode="panel"] .panel-content {
   display: grid;
   grid-template-columns: 300px 1fr;
+  grid-template-rows: auto minmax(0, 1fr);
+}
+
+html[data-mode="panel"] .top {
+  grid-column: 1 / -1;
+  max-width: 292px;
+}
+
+html[data-mode="panel"] #inbox-row {
+  margin-bottom: 2px;
+  padding: 8px 8px 8px 30px;
+  font-size: 14px;
+  font-weight: 600;
+}
+
+html[data-mode="panel"] #inbox-row.is-selected {
+  background: var(--veil-strong);
+  color: var(--text);
+}
+
+/* The inbox takes the detail pane: only its heading and its items stay. */
+.detail:not([data-view="inbox"]) > .inbox-list {
+  display: none;
+}
+
+html[data-mode="panel"] .detail[data-view="inbox"] > :not(.detail-name):not(.inbox-list) {
+  display: none;
 }
 
 html[data-mode="panel"] .projects {
@@ -510,7 +656,8 @@ html[data-mode="panel"] .detail {
 
 /* -- inputs ------------------------------------------------------------ */
 
-input {
+input,
+textarea {
   width: 100%;
   min-width: 0;
   padding: 2px 4px;
@@ -532,29 +679,41 @@ input {
 /* Anything you can type into carries a faint dashed underline, so it reads
    apart from plain text (log lines, ages, titles) before you touch it. It
    brightens under the pointer and becomes a boxed field while you type. */
-input:not(#quick) {
+:is(input, textarea):not(.boxed) {
   border-bottom: 1px dashed rgba(255, 255, 255, 0.16);
 }
 
-input:not(#quick):hover {
+:is(input, textarea):not(.boxed):hover {
   background: var(--veil);
   border-bottom-color: rgba(255, 255, 255, 0.38);
 }
 
-input::placeholder {
+::placeholder {
   color: var(--text-3);
 }
 
-input:focus,
-input:not(#quick):focus {
+:is(input, textarea):focus,
+:is(input, textarea):not(.boxed):focus {
   background: var(--field);
   border-bottom-color: transparent;
   box-shadow: inset 0 0 0 1px var(--accent);
 }
 
-input:disabled {
+:is(input, textarea):disabled:not(.boxed) {
   cursor: default;
   border-bottom-color: transparent;
+}
+
+/* The note grows with what is written in it (field-sizing), up to a few lines. */
+textarea {
+  display: block;
+  resize: none;
+  field-sizing: content;
+  max-height: 9em;
+  overflow-y: auto;
+  line-height: 1.5;
+  white-space: pre-wrap;
+  text-overflow: clip;
 }
 
 .row .name {
@@ -623,7 +782,8 @@ input:disabled {
   content: "\2192  next: ";
 }
 
-.log .note {
+.log .note,
+.inbox-list .note {
   font-size: 12px;
   line-height: 1.55;
   color: var(--text-2);
@@ -631,22 +791,186 @@ input:disabled {
 
 /* -- quick add --------------------------------------------------------- */
 
-#quick {
-  flex: none;
-  margin-top: 10px;
+.boxed {
   padding: 9px 10px;
   font-size: 13px;
   background: var(--field);
   border: 1px solid var(--border);
 }
 
-#quick:focus {
+.boxed:focus {
   border-color: var(--accent);
   box-shadow: none;
 }
 
-#quick:disabled {
+.boxed:disabled {
   opacity: 0.5;
+}
+
+/* The inbox field is the quiet one: a line, so the box below stays the log. */
+#capture {
+  padding: 6px 11px;
+  font-size: 13px;
+}
+
+#quick {
+  flex: none;
+  margin-top: 10px;
+}
+
+/* -- area, note, welcome back ------------------------------------------ */
+
+#detail-area {
+  flex: none;
+  max-width: 200px;
+  margin-top: 2px;
+  font-size: 12px;
+  color: var(--text-2);
+}
+
+#detail-note {
+  flex: none;
+  margin-top: 8px;
+  font-size: 12px;
+  color: var(--text-2);
+}
+
+.welcome {
+  flex: none;
+  margin: 0;
+  padding: 12px 4px 0;
+  font-size: 12px;
+  color: var(--text-2);
+}
+
+/* -- ideas, inbox items ------------------------------------------------ */
+
+#ideas {
+  flex: none;
+}
+
+#ideas summary {
+  cursor: pointer;
+  list-style: none;
+}
+
+#ideas summary::-webkit-details-marker {
+  display: none;
+}
+
+#ideas summary::before {
+  content: "+  ";
+  white-space: pre;
+}
+
+#ideas[open] summary::before {
+  content: "\2212  ";
+}
+
+#ideas summary:hover {
+  color: var(--text);
+}
+
+#ideas summary:hover::before,
+#ideas summary:focus-visible::before {
+  color: var(--accent);
+}
+
+#ideas summary:focus-visible {
+  outline: 1px solid var(--accent);
+  outline-offset: -1px;
+}
+
+#ideas > input {
+  width: calc(100% - 8px);
+  margin: 4px 4px 0;
+}
+
+.ideas-list,
+.inbox-list {
+  margin: 0;
+  padding: 0 4px;
+  list-style: none;
+}
+
+.ideas-list {
+  max-height: 140px;
+  overflow-y: auto;
+}
+
+.inbox-list {
+  flex: 1;
+  min-height: 0;
+  overflow-y: auto;
+}
+
+.ideas-list li {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  padding: 4px 0;
+}
+
+.inbox-list li {
+  display: grid;
+  gap: 6px;
+  padding: 10px 0;
+}
+
+.inbox-list li + li {
+  border-top: 1px solid var(--border);
+}
+
+.inbox-list:focus {
+  outline: none;
+}
+
+.item-text {
+  flex: 1;
+  min-width: 0;
+  font-size: 13px;
+  line-height: 1.5;
+  color: var(--text-2);
+  overflow-wrap: anywhere;
+}
+
+.inbox-list .item-text {
+  color: var(--text);
+}
+
+.inbox-tools {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+
+.inbox-tools .age {
+  margin-right: auto;
+}
+
+.mini {
+  flex: none;
+  padding: 2px 6px;
+  font-size: 11px;
+  color: var(--text-2);
+  transition:
+    color 120ms ease,
+    background-color 120ms ease;
+}
+
+.mini:hover {
+  color: var(--text);
+  background: var(--veil-strong);
+}
+
+select {
+  max-width: 150px;
+  padding: 2px 4px;
+  font: inherit;
+  font-size: 11px;
+  color: var(--text-2);
+  background: var(--field);
+  border: 1px solid var(--border);
 }
 
 /* -- empty state ------------------------------------------------------- */
@@ -692,7 +1016,8 @@ input:disabled {
 
 /* -- confirm dialog ---------------------------------------------------- */
 
-#ask {
+#ask,
+#recap {
   width: min(300px, calc(100vw - 32px));
   padding: 16px;
   color: var(--text);
@@ -700,14 +1025,20 @@ input:disabled {
   border: 1px solid var(--border);
 }
 
-#ask::backdrop {
+#ask::backdrop,
+#recap::backdrop {
   background: rgba(0, 0, 0, 0.6);
 }
 
-#ask p {
+#ask p,
+#recap p {
   margin: 0 0 16px;
   font-size: 13px;
   line-height: 1.4;
+}
+
+#recap {
+  width: min(340px, calc(100vw - 32px));
 }
 
 .ask-actions {
@@ -743,6 +1074,7 @@ input:disabled {
 
 /* -- focus ------------------------------------------------------------- */
 
+select:focus-visible,
 button:focus-visible {
   outline: 1px solid var(--accent);
   outline-offset: -1px;
@@ -762,6 +1094,17 @@ button:focus-visible {
   background: var(--scroll);
   background-clip: content-box;
   border: 3px solid transparent;
+}
+
+/* Confirms a change: the text lights up and settles back to its own colour. */
+.flash {
+  animation: flash 600ms ease-out;
+}
+
+@keyframes flash {
+  from {
+    color: var(--accent);
+  }
 }
 
 @media (prefers-reduced-motion: reduce) {
