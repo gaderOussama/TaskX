@@ -18,7 +18,7 @@ const ideaInput = document.getElementById('idea');
 const capture = document.getElementById('capture');
 const topBar = document.querySelector('.top');
 const areasNav = document.getElementById('areas');
-const areasList = document.getElementById('areas-list');
+const areaSuggest = document.getElementById('area-suggest');
 const inboxRow = document.getElementById('inbox-row');
 const inboxList = document.getElementById('inbox-list');
 const whisperName = document.getElementById('whisper-name');
@@ -587,7 +587,6 @@ function renderAreas() {
       areasNav.append(tab);
     }
   }
-  areasList.replaceChildren(...names.map((name) => new Option(name)));
 }
 
 /* ── whisper ───────────────────────────────────────────────────────────── */
@@ -888,6 +887,34 @@ function wireDetail() {
     project.updatedAt = Date.now();
     saveSoon();
   });
+  // Other areas in use, drawn here because a native datalist popup cannot be themed.
+  const suggest = (event) => {
+    const current = detailArea.value.trim().toLowerCase();
+    const typed = event.type === 'input' ? current : ''; // on focus, offer every other area
+    areaSuggest.replaceChildren(...areas()
+      .filter((name) => name.toLowerCase() !== current && name.toLowerCase().includes(typed))
+      .map((name) => miniButton(name, `Use area ${name}`, () => {
+        detailArea.value = name;
+        detailArea.dispatchEvent(new Event('input'));
+        detailArea.dispatchEvent(new Event('change'));
+        detailArea.focus();
+        areaSuggest.hidden = true;
+      })));
+    areaSuggest.hidden = !areaSuggest.children.length;
+  };
+  detailArea.addEventListener('focus', suggest);
+  detailArea.addEventListener('input', suggest);
+  for (const el of [detailArea, areaSuggest]) {
+    el.addEventListener('focusout', (event) => {
+      if (event.relatedTarget !== detailArea && !areaSuggest.contains(event.relatedTarget)) areaSuggest.hidden = true;
+    });
+    el.addEventListener('keydown', (event) => {
+      if (event.key !== 'Escape' || areaSuggest.hidden) return;
+      event.stopPropagation();
+      detailArea.focus(); // refocusing redraws the row, so hide it after
+      areaSuggest.hidden = true;
+    });
+  }
   // Tabs and the filter follow the edit once it is finished, not on every key.
   detailArea.addEventListener('change', () => {
     const project = selected();

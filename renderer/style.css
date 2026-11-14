@@ -828,6 +828,24 @@ textarea {
   color: var(--text-2);
 }
 
+#area-suggest {
+  flex: none;
+  display: flex;
+  flex-wrap: wrap;
+  gap: 2px;
+  margin-top: 2px;
+}
+
+#area-suggest[hidden] {
+  display: none;
+}
+
+#area-suggest .mini:hover,
+#area-suggest .mini:focus-visible {
+  color: var(--accent);
+  background: none;
+}
+
 #detail-note {
   flex: none;
   margin-top: 8px;
