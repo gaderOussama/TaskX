@@ -11,6 +11,9 @@ use crate::easing::make_ease;
 
 /// Closed: one square tile carrying the mark.
 pub const ORB: f64 = 56.0;
+/// Extra width on the resting tile while the "next step" whisper is on: the
+/// renderer draws a one-line strip to the right of the tile inside it.
+pub const WHISPER_W: f64 = 260.0;
 /// First open: a small card holding the starred projects and the log field.
 /// Its height follows its content, which the page measures and reports.
 pub const POPOVER_W: f64 = 320.0;
@@ -59,9 +62,9 @@ impl Mode {
 
     /// Width, height, left edge and top edge of this mode. Only the resting tile
     /// sits out past the screen edge; the cards open at the panel's inset.
-    pub fn frame(self, geometry: &Geometry, card_h: f64) -> (f64, f64, f64, f64) {
+    pub fn frame(self, geometry: &Geometry, card_h: f64, whisper: bool) -> (f64, f64, f64, f64) {
         match self {
-            Mode::Circle => (ORB, ORB, geometry.orb_x, geometry.orb_y),
+            Mode::Circle => (rest_w(whisper), ORB, geometry.orb_x, geometry.orb_y),
             Mode::Popover => {
                 // Opens around the orb's centre line, but never past the
                 // panel's own top and bottom margins.
@@ -76,6 +79,15 @@ impl Mode {
         }
     }
 
+}
+
+/// Width of the resting tile.
+fn rest_w(whisper: bool) -> f64 {
+    if whisper {
+        ORB + WHISPER_W
+    } else {
+        ORB
+    }
 }
 
 #[derive(Clone, Copy)]
@@ -96,6 +108,7 @@ struct Inner {
     mode: Mode,
     geometry: Geometry,
     card_h: f64,
+    whisper: bool,
 }
 
 /// The panel's single source of truth. Everything the pointer watcher needs is
@@ -133,6 +146,7 @@ impl Default for Panel {
                     scale: 1.0,
                 },
                 card_h: POPOVER_H,
+                whisper: false,
             }),
             generation: AtomicU64::new(0),
             hold: AtomicBool::new(false),
@@ -174,7 +188,7 @@ pub fn measure(window: &WebviewWindow) -> Geometry {
 pub fn adopt(app: &AppHandle, geometry: Geometry) {
     let state = app.state::<Panel>();
     let mut inner = state.inner.lock().unwrap();
-    let (width, height, x, y) = Mode::Circle.frame(&geometry, inner.card_h);
+    let (width, height, x, y) = Mode::Circle.frame(&geometry, inner.card_h, inner.whisper);
     inner.geometry = geometry;
     inner.width = width;
     inner.height = height;
@@ -185,6 +199,31 @@ pub fn adopt(app: &AppHandle, geometry: Geometry) {
 
 pub fn set_hold(app: &AppHandle, hold: bool) {
     app.state::<Panel>().hold.store(hold, Ordering::SeqCst);
+}
+
+/// The tile grows (or shrinks) to carry the next-step strip. Only the resting
+/// tile is affected; the cards ignore it. Instant: it is a setting, not a gesture.
+pub fn set_whisper(app: &AppHandle, on: bool) {
+    let state = app.state::<Panel>();
+    let frame = {
+        let mut inner = state.inner.lock().unwrap();
+        inner.whisper = on;
+        (inner.mode == Mode::Circle).then(|| {
+            // Stops a collapse still tweening toward the old width.
+            state.generation.fetch_add(1, Ordering::SeqCst);
+            let (w, h, x, y) = Mode::Circle.frame(&inner.geometry, inner.card_h, on);
+            inner.width = w;
+            inner.height = h;
+            inner.x = x;
+            inner.y = y;
+            (w, h, x, y)
+        })
+    };
+    if let (Some((w, h, x, y)), Some(window)) = (frame, app.get_webview_window("main")) {
+        if let Some(target) = target(&window) {
+            apply(&target, w, h, x, y);
+        }
+    }
 }
 
 pub fn set_reduced(app: &AppHandle, reduced: bool) {
@@ -278,14 +317,38 @@ pub fn toggle(app: &AppHandle) {
         Mode::Circle
     };
     set_by_user(app, next, reduced);
-    // Summoned from the keyboard or tray: take focus so the log field is ready
-    // to type into. Hover never does this, it would steal from the app in use.
     if next.open() {
-        if let Some(window) = app.get_webview_window("main") {
-            let _ = window.set_focus();
-        }
-        let _ = app.emit("panel:focus", ());
+        focus(app, "log");
     }
+}
+
+/// Alt+Shift+X: open the card if it is closed, never close it, and aim the
+/// keyboard at the capture field.
+pub fn capture(app: &AppHandle) {
+    let (mode, reduced) = {
+        let state = app.state::<Panel>();
+        let mode = state.inner.lock().unwrap().mode;
+        (mode, state.reduced.load(Ordering::SeqCst))
+    };
+    let hidden = app
+        .get_webview_window("main")
+        .and_then(|window| window.is_visible().ok())
+        .map(|visible| !visible)
+        .unwrap_or(false);
+    if hidden || mode == Mode::Circle {
+        set_by_user(app, Mode::Popover, reduced);
+    }
+    focus(app, "capture");
+}
+
+/// Summoned from the keyboard or tray: take focus so the field is ready to type
+/// into, and say which one (`"log"` or `"capture"`). Hover never does this, it
+/// would steal focus from the app in use.
+fn focus(app: &AppHandle, what: &str) {
+    if let Some(window) = app.get_webview_window("main") {
+        let _ = window.set_focus();
+    }
+    let _ = app.emit("panel:focus", what);
 }
 
 /// Closing on purpose: the pointer may still be sitting on the panel, and it
@@ -322,7 +385,7 @@ pub fn set_mode(app: &AppHandle, mode: Mode, instant: bool) {
     let (from_w, from_h, from_x, from_y, to_w, to_h, to_x, to_y) = {
         let mut inner = state.inner.lock().unwrap();
         inner.geometry = geometry;
-        let (width, height, x, y) = mode.frame(&inner.geometry, inner.card_h);
+        let (width, height, x, y) = mode.frame(&inner.geometry, inner.card_h, inner.whisper);
         inner.mode = mode;
         (
             inner.width,
@@ -440,7 +503,10 @@ pub fn start_pointer_watch(app: AppHandle) {
                     && (y as f64) >= y0
                     && (x as f64) < x0 + w
                     && (y as f64) < y0 + h;
-                (inside, inner.mode.open(), inner.width > ORB + 0.5)
+                // Still growing back toward the resting tile (wider or taller
+                // than it rests; the strip makes "rest" wider than ORB).
+                let mid = inner.width > rest_w(inner.whisper) + 0.5 || inner.height > ORB + 0.5;
+                (inside, inner.mode.open(), mid)
             };
             let hold = state.hold.load(Ordering::SeqCst);
             let reduced = state.reduced.load(Ordering::SeqCst);
